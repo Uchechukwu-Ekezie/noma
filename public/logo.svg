@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Noma logo">
+  <!-- Transparent background by default -->
+  <!-- Outer ring -->
+  <circle cx="100" cy="100" r="78" fill="none" stroke="#A259FF" stroke-width="20" />
+  <!-- Head (solid circle) -->
+  <circle cx="100" cy="72" r="16" fill="#A259FF" />
+  <!-- Smile (rounded stroke) -->
+  <path d="M62 120 Q100 148 138 120" fill="none" stroke="#A259FF" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
