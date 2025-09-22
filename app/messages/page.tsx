@@ -1,12 +1,14 @@
+"use client";
+
 import { ChatInterface } from "@/components/messaging/chat-interface";
 
-export default function Messages() {
+export default function MessagesPage() {
   return (
-    <main className=" bg-[#2b2b2b] text-white">
+    <div className="min-h-screen bg-[#2b2b2b]">
       <ChatInterface />
-    </main>
-  )
+    </div>
+  );
 }
 
-// Disable static generation for interactive components
-export const dynamic = 'force-dynamic'
+// Disable static generation for real-time messaging
+export const dynamic = 'force-dynamic';

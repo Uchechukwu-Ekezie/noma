@@ -1,13 +1,14 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Home, Search, HelpCircle } from "lucide-react"
-import { BackButton } from "@/components/back-button"
+"use client";
+
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Home, Search, HelpCircle } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 
 export default function NotFound() {
-
   return (
     <div className="min-h-screen bg-[#2b2b2b] text-[#A259FF] flex items-center justify-center p-4">
-      <div className="text-center max-w-2xl mx-auto">
+      <div className="max-w-2xl mx-auto text-center">
         {/* 404 Number */}
         <div className="mb-8">
           <h1 className="text-9xl font-bold text-[#A259FF] mb-4 opacity-80">
@@ -18,32 +19,32 @@ export default function NotFound() {
 
         {/* Error Message */}
         <div className="mb-12">
-          <h2 className="text-3xl font-bold text-white mb-4">
+          <h2 className="mb-4 text-3xl font-bold text-white">
             Oops! Page Not Found
           </h2>
           <p className="text-lg text-[#A259FF]/80 mb-2">
-            The page you&apos;re looking for seems to have vanished into the digital void.
+            The page you&apos;re looking for seems to have vanished into the
+            digital void.
           </p>
           <p className="text-base text-white/60">
-            Don&apos;t worry, even the best explorers sometimes take a wrong turn.
+            Don&apos;t worry, even the best explorers sometimes take a wrong
+            turn.
           </p>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
+        <div className="flex flex-col items-center justify-center gap-4 mb-12 sm:flex-row">
           <Link href="/">
             <Button className="bg-[#A259FF] text-white px-8 py-4 rounded-[20px] font-semibold hover:bg-[#A259FF]/90 transition-colors flex items-center gap-2">
               <Home className="w-5 h-5" />
               Back to Home
             </Button>
           </Link>
-          
-          <BackButton>
-            Go Back
-          </BackButton>
-          
+
+          <BackButton>Go Back</BackButton>
+
           <Link href="/marketplace">
-            <Button 
+            <Button
               variant="outline"
               className="border-2 border-[#A259FF] text-[#A259FF] px-8 py-4 rounded-[20px] font-semibold hover:bg-[#A259FF] hover:text-white transition-colors flex items-center gap-2"
             >
@@ -55,13 +56,13 @@ export default function NotFound() {
 
         {/* Help Section */}
         <div className="border-t border-[#A259FF]/20 pt-8">
-          <p className="text-sm text-white/60 mb-4">
+          <p className="mb-4 text-sm text-white/60">
             Still can&apos;t find what you&apos;re looking for?
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link href="/messages">
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 className="text-[#A259FF] hover:bg-[#A259FF]/10 rounded-[20px] flex items-center gap-2"
               >
                 <HelpCircle className="w-4 h-4" />
@@ -77,5 +78,5 @@ export default function NotFound() {
         <div className="absolute top-1/2 left-5 w-16 h-16 bg-[#A259FF]/8 rounded-full blur-lg"></div>
       </div>
     </div>
-  )
+  );
 }

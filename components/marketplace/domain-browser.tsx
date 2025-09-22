@@ -1,8 +1,11 @@
 "use client";
 
+import { useState, Fragment } from "react";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Search,
   Filter,
@@ -13,129 +16,134 @@ import {
   ChevronRight,
   Globe,
   FolderOpen,
+  Loader2,
+  DollarSign,
+  Clock,
+  User,
+  ExternalLink,
 } from "lucide-react";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CollectionsBrowser } from "./collections-browser";
+import { useListings, useSearchDomains, useTrendingDomains } from "@/hooks/use-doma";
+import type { NameModel, NameListingModel } from "@/types/doma";
 
-// Mock data for demonstration
-const mockDomains = [
-  {
-    id: "1",
-    name: "techstartup.com",
-    price: "2.5",
-    currency: "ETH",
-    usdPrice: "6250",
-    image: "/uche.svg",
-    owner: "0x1234567890abcdef1234567890abcdef12345678",
-    isListed: true,
-  },
-  {
-    id: "2",
-    name: "cryptoai.com",
-    price: "1.8",
-    currency: "ETH",
-    usdPrice: "4500",
-    image: "/uche.svg",
-    owner: "0xabcdef1234567890abcdef1234567890abcdef12",
-    isListed: true,
-  },
-  {
-    id: "3",
-    name: "web3dev.com",
-    price: "3.2",
-    currency: "ETH",
-    usdPrice: "8000",
-    image: "/uche.svg",
-    owner: "0x9876543210fedcba9876543210fedcba98765432",
-    isListed: true,
-  },
-  {
-    id: "4",
-    name: "blockchainapp.com",
-    price: "4.1",
-    currency: "ETH",
-    usdPrice: "10250",
-    image: "/uche.svg",
-    owner: "0xfedcba9876543210fedcba9876543210fedcba98",
-    isListed: true,
-  },
-  {
-    id: "5",
-    name: "nftmarket.com",
-    price: "2.9",
-    currency: "ETH",
-    usdPrice: "7250",
-    image: "/uche.svg",
-    owner: "0x13579bdf02468ace13579bdf02468ace13579bdf",
-    isListed: true,
-  },
-  {
-    id: "6",
-    name: "defiprotocol.com",
-    price: "5.5",
-    currency: "ETH",
-    usdPrice: "13750",
-    image: "/uche.svg",
-    owner: "0x2468ace13579bdf02468ace13579bdf02468ace",
-    isListed: true,
-  },
+// Categories for filtering
+const categories = [
+  { id: "all", name: "All Domains", count: 0 },
+  { id: "tech", name: "Tech & AI", count: 0 },
+  { id: "crypto", name: "Crypto & Web3", count: 0 },
+  { id: "business", name: "Business", count: 0 },
+  { id: "gaming", name: "Gaming", count: 0 },
+  { id: "nft", name: "NFT & Art", count: 0 },
 ];
 
-export function DomainBrowser() {
+// Helper function to format price
+const formatPrice = (price: string, currency?: string): string => {
+  try {
+    const numPrice = parseFloat(price);
+    if (isNaN(numPrice)) return "Price N/A";
+
+    // Convert from wei if needed (assuming 18 decimals for ETH)
+    const ethPrice = numPrice / Math.pow(10, 18);
+
+    if (ethPrice < 0.001) {
+      return `< 0.001 ${currency || 'ETH'}`;
+    }
+
+    return `${ethPrice.toFixed(3)} ${currency || 'ETH'}`;
+  } catch {
+    return "Price N/A";
+  }
+};
+
+// Helper function to format address
+const formatAddress = (address: string): string => {
+  if (!address) return "Unknown";
+
+  // Remove CAIP-10 prefix if present
+  const cleanAddress = address.includes(":")
+    ? address.split(":").pop() || address
+    : address;
+
+  return `${cleanAddress.slice(0, 6)}...${cleanAddress.slice(-4)}`;
+};
+
+interface DomainBrowserProps {
+  searchQuery?: string;
+}
+
+export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowserProps) {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery || "");
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [activeTab, setActiveTab] = useState("domains");
-  const DOMAINS_PER_PAGE = 6;
+  const [isSearching, setIsSearching] = useState(!!initialSearchQuery);
 
-  // Filter domains based on search
-  const filteredDomains = mockDomains.filter((domain) =>
-    domain.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Fetch listings from Doma API
+  const {
+    data: listingsData,
+    fetchNextPage: fetchNextListings,
+    hasNextPage: hasNextListings,
+    isFetchingNextPage: isFetchingNextListings,
+    isLoading: isLoadingListings,
+    error: listingsError,
+  } = useListings({ take: 12 });
 
-  // Paginate the domains
-  const startIndex = (currentPage - 1) * DOMAINS_PER_PAGE;
-  const endIndex = startIndex + DOMAINS_PER_PAGE;
-  const paginatedDomains = filteredDomains.slice(startIndex, endIndex);
-  const totalPages = Math.ceil(filteredDomains.length / DOMAINS_PER_PAGE);
+  // Fetch search results if there's a search query
+  const {
+    data: searchData,
+    fetchNextPage: fetchNextSearch,
+    hasNextPage: hasNextSearch,
+    isFetchingNextPage: isFetchingNextSearch,
+    isLoading: isLoadingSearch,
+    error: searchError,
+  } = useSearchDomains(searchQuery, { take: 12 });
+
+  // Fetch trending domains for featured section
+  const {
+    data: trendingDomains,
+    isLoading: isLoadingTrending,
+    error: trendingError,
+  } = useTrendingDomains(6);
+
+  // Determine which data to show
+  const currentData = isSearching ? searchData : listingsData;
+  const isLoading = isSearching ? isLoadingSearch : isLoadingListings;
+  const error = isSearching ? searchError : listingsError;
+  const hasNextPage = isSearching ? hasNextSearch : hasNextListings;
+  const fetchNextPage = isSearching ? fetchNextSearch : fetchNextListings;
+  const isFetchingNextPage = isSearching ? isFetchingNextSearch : isFetchingNextListings;
+
+  // Flatten paginated data
+  const domains = currentData?.pages?.flatMap((page) => page.items) || [];
+
+  const handleDomainClick = (domainName: string) => {
+    console.log("Clicking domain:", domainName);
+    router.push(`/domains/${encodeURIComponent(domainName)}`);
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSearching(true);
-    setCurrentPage(1);
   };
 
   const handleClearSearch = () => {
     setSearchQuery("");
     setIsSearching(false);
-    setCurrentPage(1);
   };
 
   const handleTrendingSearch = (query: string) => {
     setSearchQuery(query);
     setIsSearching(true);
-    setCurrentPage(1);
   };
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleDomainClick = (domain: any) => {
-    router.push(`/domains/${domain.id}`);
-  };
-
-  const handleOfferClick = (domain: any) => {
-    console.log("Make offer for:", domain);
+  const handleOfferClick = (listing: NameListingModel) => {
+    console.log("Make offer for:", listing);
     // You can implement offer popup here
   };
 
-  const handleContactOwner = (domain: any) => {
-    console.log("Contact owner for:", domain);
+  const handleContactOwner = (listing: NameListingModel) => {
+    console.log("Contact owner for:", listing);
     // You can implement contact functionality here
   };
 
@@ -161,14 +169,12 @@ export function DomainBrowser() {
               </h2>
               <p className="text-[24px]">
                 {isSearching && searchQuery
-                  ? `Found ${filteredDomains.length} domains matching your search`
-                  : "Search through thousands of premium domains or browse all available listings"}
+                  ? `Found ${domains.length} domains matching your search`
+                  : "Search through real blockchain domains or browse all available listings"}
               </p>
-              {filteredDomains.length > 0 && (
+              {domains.length > 0 && (
                 <p className="mt-2 text-sm text-white/60">
-                  Showing {startIndex + 1}-{Math.min(endIndex, filteredDomains.length)} of{" "}
-                  {filteredDomains.length} domains
-                  {totalPages > 1 && ` • Page ${currentPage} of ${totalPages}`}
+                  Showing {domains.length} domains from Doma Testnet
                 </p>
               )}
             </div>
@@ -196,12 +202,17 @@ export function DomainBrowser() {
                   <Filter className="w-4 h-4 mr-2" />
                   {isSearching ? "Clear Search" : "Browse All"}
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="sm:w-auto bg-[#A259FF] text-white py-2 px-4 rounded-[20px] hover:bg-[#A259FF]/90 transition-all duration-300 cursor-pointer flex items-center justify-center"
+                  disabled={isLoading}
                 >
-                  <Search className="w-4 h-4 mr-2" />
-                  Search
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4 mr-2" />
+                  )}
+                  {isLoading ? "Searching..." : "Search"}
                 </button>
               </form>
             </div>
@@ -224,51 +235,165 @@ export function DomainBrowser() {
                 ))}
               </div>
             )}
+
+            {/* Trending Domains Section */}
+            {!isSearching && (
+              <Card className="bg-[#3b3b3b] border-[#A259FF]/20 mb-8">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-white">
+                    <TrendingUp className="h-5 w-5 text-[#A259FF]" />
+                    Featured Domains
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingTrending ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-[#A259FF]" />
+                      <span className="ml-2 text-[#A259FF]/80">Loading featured domains...</span>
+                    </div>
+                  ) : trendingError ? (
+                    <div className="text-center py-8">
+                      <p className="text-red-400">Failed to load featured domains</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {trendingDomains?.slice(0, 6).map((domain) => (
+                        <Card
+                          key={domain.name}
+                          className="bg-[#2b2b2b] border-[#A259FF]/20 cursor-pointer hover:border-[#A259FF]/40 transition-colors"
+                          onClick={() => handleDomainClick(domain.name)}
+                        >
+                          <CardContent className="p-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <h3 className="font-semibold text-white truncate">{domain.name}</h3>
+                                <Badge variant="secondary" className="text-xs">
+                                  Featured
+                                </Badge>
+                              </div>
+                              {domain.tokens?.[0]?.listings?.[0] && (
+                                <div className="flex items-center gap-2 text-sm">
+                                  <DollarSign className="h-4 w-4 text-[#A259FF]" />
+                                  <span className="text-[#A259FF] font-medium">
+                                    {formatPrice(
+                                      domain.tokens[0].listings[0].price,
+                                      domain.tokens[0].listings[0].currency.symbol
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2 text-xs text-[#A259FF]/60">
+                                <User className="h-3 w-3" />
+                                <span>{formatAddress(domain.claimedBy || "")}</span>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Domain Grid */}
-          {paginatedDomains.length > 0 ? (
-            <div className="w-full">
-              {/* Tabs Navigation */}
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full mx-auto grid-cols-2 bg-[#2b2b2b] p-2 rounded-none max-w-7xl mb-6">
-                  <TabsTrigger 
-                    value="domains" 
-                    className="flex items-center gap-2 data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-[#A259FF] text-white/60 rounded-none py-4 px-6"
-                  >
-                    <Globe className="h-4 w-4" />
-                    Domains
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="collections" 
-                    className="flex items-center gap-2 data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-[#A259FF] text-white/60 rounded-none py-4 px-6"
-                  >
-                    <FolderOpen className="h-4 w-4" />
-                    Collections
-                  </TabsTrigger>
-                </TabsList>
+          <div className="w-full">
+            {/* Tabs Navigation */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full mx-auto grid-cols-2 bg-[#2b2b2b] p-2 rounded-none max-w-7xl mb-6">
+                <TabsTrigger
+                  value="domains"
+                  className="flex items-center gap-2 data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-[#A259FF] text-white/60 rounded-none py-4 px-6"
+                >
+                  <Globe className="h-4 w-4" />
+                  Domains ({domains.length})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="collections"
+                  className="flex items-center gap-2 data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-[#A259FF] text-white/60 rounded-none py-4 px-6"
+                >
+                  <User className="h-4 w-4" />
+                  My Portfolio
+                </TabsTrigger>
+              </TabsList>
 
-                <TabsContent value="domains" className="space-y-6">
-                  <div className="bg-[#3b3b3b] w-full p-4 pt-6">
-                    <div className="container mx-auto max-w-7xl">
+              <TabsContent value="domains" className="space-y-6">
+                <div className="bg-[#3b3b3b] w-full p-4 pt-6">
+                  <div className="container mx-auto max-w-7xl">
+                    {/* Loading State */}
+                    {isLoading && (
+                      <div className="flex items-center justify-center py-12">
+                        <Loader2 className="h-8 w-8 animate-spin text-[#A259FF]" />
+                        <span className="ml-3 text-[#A259FF]/80">
+                          {searchQuery ? "Searching domains..." : "Loading domains..."}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Error State */}
+                    {error && (
+                      <div className="text-center py-12">
+                        <p className="text-red-400 mb-4">Failed to load domains</p>
+                        <Button
+                          onClick={() => window.location.reload()}
+                          variant="outline"
+                          className="border-[#A259FF] text-[#A259FF] hover:bg-[#A259FF] hover:text-white"
+                        >
+                          Try Again
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* No Results */}
+                    {!isLoading && !error && domains.length === 0 && (
+                      <div className="text-center py-12">
+                        <Globe className="h-12 w-12 mx-auto text-[#A259FF]/40 mb-4" />
+                        <h3 className="text-lg font-semibold text-white mb-2">
+                          {searchQuery ? "No domains found" : "No domains available"}
+                        </h3>
+                        <p className="text-[#A259FF]/60 mb-4">
+                          {searchQuery
+                            ? "Try adjusting your search terms"
+                            : "Check back later for new listings"}
+                        </p>
+                        {isSearching && (
+                          <button
+                            onClick={handleClearSearch}
+                            className="mt-4 bg-[#A259FF] hover:bg-[#A259FF]/90 text-white py-2 px-4 rounded-[20px] transition-all duration-300"
+                          >
+                            Browse All Domains
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Domains Grid */}
+                    {!isLoading && !error && domains.length > 0 && (
                       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {paginatedDomains.map((domain) => (
+                        {domains.map((listing) => (
                           <div
-                            key={domain.id}
+                            key={listing.id}
                             className="transition-shadow bg-[#2b2b2b] text-white cursor-pointer group hover:shadow-lg rounded-[20px]"
-                            onClick={() => handleDomainClick(domain)}
+                            onClick={() => handleDomainClick(listing.name)}
                           >
                             {/* Domain Image */}
                             <div className="w-full h-64 relative rounded-t-[20px] overflow-hidden">
                               <div className="absolute inset-0 bg-gradient-to-br from-[#A259FF] to-[#00D4FF] flex items-center justify-center">
                                 <div className="text-center">
                                   <div className="text-6xl font-bold text-white mb-4 drop-shadow-lg">
-                                    {domain.name.split('.')[0].charAt(0).toUpperCase()}
+                                    {listing.name.split('.')[0].charAt(0).toUpperCase()}
                                   </div>
                                   <div className="text-lg text-white/90 font-medium drop-shadow-lg">
-                                    {domain.name}
+                                    {listing.name}
                                   </div>
                                 </div>
+                              </div>
+                              <div className="absolute top-4 right-4">
+                                <Badge className="bg-[#A259FF] text-white">
+                                  <ExternalLink className="w-3 h-3 mr-1" />
+                                  {listing.orderbook}
+                                </Badge>
                               </div>
                             </div>
 
@@ -276,13 +401,16 @@ export function DomainBrowser() {
                               <CardHeader className="pb-3">
                                 <div className="flex items-start justify-between">
                                   <div className="flex-1">
-                                    <CardTitle className="text-xl font-bold text-white transition-colors group-hover:text-[#A259FF]">
-                                      {domain.name}
+                                    <CardTitle className="text-xl font-bold text-white transition-colors group-hover:text-[#A259FF] truncate">
+                                      {listing.name}
                                     </CardTitle>
+                                    <p className="text-sm text-white/60 mt-1">
+                                      {listing.registrar.name}
+                                    </p>
                                   </div>
                                   <Badge
                                     variant="secondary"
-                                    className="ml-2 text-white border-white bg-[#A259FF] hover:bg-[#A259FF]/80"
+                                    className="ml-2 text-white border-white bg-green-600 hover:bg-green-700"
                                   >
                                     <Star className="w-3 h-3 mr-1 fill-current" />
                                     Listed
@@ -294,10 +422,10 @@ export function DomainBrowser() {
                                 <div className="flex items-center justify-between">
                                   <div>
                                     <div className="text-2xl font-bold text-white">
-                                      {domain.price} {domain.currency}
+                                      {formatPrice(listing.price, listing.currency.symbol)}
                                     </div>
                                     <div className="text-sm text-white/80">
-                                      ~${domain.usdPrice} USD
+                                      on {listing.chain.name}
                                     </div>
                                   </div>
                                   <Badge
@@ -308,14 +436,18 @@ export function DomainBrowser() {
                                   </Badge>
                                 </div>
 
-                                <div className="flex items-center gap-4 text-sm text-white/80">
-                                  <div className="flex items-center gap-1">
-                                    <TrendingUp className="w-4 h-4" />
-                                    <span>Active Listing</span>
+                                <div className="space-y-1 text-sm text-white/80">
+                                  <div className="flex items-center gap-2">
+                                    <User className="w-4 h-4" />
+                                    <span>Owner: {formatAddress(listing.offererAddress)}</span>
                                   </div>
-                                  <div className="flex items-center gap-1">
-                                    <Star className="w-4 h-4 text-white fill-current" />
-                                    <span>Featured</span>
+                                  <div className="flex items-center gap-2">
+                                    <Clock className="w-4 h-4" />
+                                    <span>Expires: {new Date(listing.nameExpiresAt).toLocaleDateString()}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <TrendingUp className="w-4 h-4" />
+                                    <span>Listed: {new Date(listing.createdAt).toLocaleDateString()}</span>
                                   </div>
                                 </div>
 
@@ -324,7 +456,7 @@ export function DomainBrowser() {
                                     className="flex-1 bg-[#A259FF] hover:bg-[#A259FF]/90 text-white py-2 px-4 rounded-[20px] transition-all duration-300 cursor-pointer flex items-center justify-center"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleOfferClick(domain);
+                                      handleOfferClick(listing);
                                     }}
                                   >
                                     Buy/Offer
@@ -333,7 +465,7 @@ export function DomainBrowser() {
                                     className="text-white bg-transparent border-white/30 hover:bg-white/10 py-2 px-4 rounded-[20px] transition-all duration-300 cursor-pointer flex items-center justify-center border-2"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleDomainClick(domain);
+                                      handleDomainClick(listing.name);
                                     }}
                                     title="View Details"
                                   >
@@ -343,7 +475,7 @@ export function DomainBrowser() {
                                     className="text-white bg-transparent border-white/30 hover:bg-white/10 py-2 px-4 rounded-[20px] transition-all duration-300 cursor-pointer flex items-center justify-center border-2"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleContactOwner(domain);
+                                      handleContactOwner(listing);
                                     }}
                                     title="Contact Owner"
                                   >
@@ -355,98 +487,42 @@ export function DomainBrowser() {
                           </div>
                         ))}
                       </div>
-                    </div>
-                    
-                    {/* Pagination */}
-                    {totalPages > 1 && (
-                      <div className="container mx-auto">
-                        <div className="flex items-center justify-center gap-2 mt-8">
-                          <button
-                            onClick={() => handlePageChange(currentPage - 1)}
-                            disabled={currentPage === 1}
-                            className="bg-[#A259FF] hover:bg-[#A259FF]/90 disabled:bg-white/20 disabled:cursor-not-allowed text-white py-2 px-4 rounded-[20px] transition-all duration-300 cursor-pointer flex items-center justify-center"
-                          >
-                            <ChevronLeft className="w-4 h-4 mr-1" />
-                            Previous
-                          </button>
+                    )}
 
-                          <div className="flex gap-1">
-                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                              let pageNum;
-                              if (totalPages <= 5) {
-                                pageNum = i + 1;
-                              } else if (currentPage <= 3) {
-                                pageNum = i + 1;
-                              } else if (currentPage >= totalPages - 2) {
-                                pageNum = totalPages - 4 + i;
-                              } else {
-                                pageNum = currentPage - 2 + i;
-                              }
-
-                              return (
-                                <button
-                                  key={pageNum}
-                                  onClick={() => handlePageChange(pageNum)}
-                                  className={
-                                    currentPage === pageNum
-                                      ? "bg-white text-[#A259FF] py-2 px-4 rounded-[20px] transition-all duration-300 cursor-pointer flex items-center justify-center"
-                                      : "text-white border-white/20 hover:bg-white/10 py-2 px-4 rounded-[20px] transition-all duration-300 cursor-pointer flex items-center justify-center"
-                                  }
-                                >
-                                  {pageNum}
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          <button
-                            onClick={() => handlePageChange(currentPage + 1)}
-                            disabled={currentPage === totalPages}
-                            className="bg-[#A259FF] hover:bg-[#A259FF]/90 disabled:bg-white/20 disabled:cursor-not-allowed text-white py-2 px-4 rounded-[20px] transition-all duration-300 cursor-pointer flex items-center justify-center"
-                          >
-                            Next
-                            <ChevronRight className="w-4 h-4 ml-1" />
-                          </button>
-                        </div>
+                    {/* Load More Button */}
+                    {!isLoading && !error && hasNextPage && (
+                      <div className="flex justify-center mt-8">
+                        <Button
+                          onClick={() => fetchNextPage()}
+                          disabled={isFetchingNextPage}
+                          className="bg-[#A259FF] text-white hover:bg-[#A259FF]/90 px-8 py-4 rounded-[20px] font-semibold"
+                        >
+                          {isFetchingNextPage ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Loading more...
+                            </>
+                          ) : (
+                            "Load More Domains"
+                          )}
+                        </Button>
                       </div>
                     )}
                   </div>
-                </TabsContent>
+                </div>
+              </TabsContent>
 
-                <TabsContent value="collections" className="space-y-6">
-                  <div className="bg-[#3b3b3b] w-full p-4 pt-6">
-                    <div className="container mx-auto max-w-7xl">
-                      <CollectionsBrowser />
-                    </div>
+              <TabsContent value="collections" className="space-y-6">
+                <div className="bg-[#3b3b3b] w-full p-4 pt-6">
+                  <div className="container mx-auto max-w-7xl">
+                    <CollectionsBrowser />
                   </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-          ) : (
-            <div className="py-12 text-center">
-              <div className="text-white">
-                <h4 className="mb-2 text-xl font-semibold">
-                  {isSearching ? "No domains found" : "No domains available"}
-                </h4>
-                <p className="text-white/60">
-                  {isSearching
-                    ? "Try searching with different keywords or browse all domains."
-                    : "Check back later for new domain listings."}
-                </p>
-                {isSearching && (
-                  <button
-                    onClick={handleClearSearch}
-                    className="mt-4 bg-[#A259FF] hover:bg-[#A259FF]/90 text-white py-2 px-4 rounded-[20px] transition-all duration-300"
-                  >
-                    Browse All Domains
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
       </div>
-
     </div>
   );
 }
