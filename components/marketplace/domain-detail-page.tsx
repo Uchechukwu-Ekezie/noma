@@ -24,15 +24,48 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CountdownTimer } from "./countdown-timer";
+import { OfferPopup } from "./offer-popup";
+import { AcceptRejectOfferPopup } from "./accept-reject-offer-popup";
+import { useOffers } from "@/hooks/use-doma";
+import type { NameModel } from "@/types/doma";
 
 interface DomainDetailPageProps {
-    domain: any;
+    domain: NameModel;
 }
 
 export function DomainDetailPage({ domain }: DomainDetailPageProps) {
     const router = useRouter();
     const [copied, setCopied] = useState(false);
     const [isFollowing, setIsFollowing] = useState(false);
+    const [showOfferPopup, setShowOfferPopup] = useState(false);
+    const [showAcceptRejectPopup, setShowAcceptRejectPopup] = useState(false);
+    const [selectedOffer, setSelectedOffer] = useState<any>(null);
+    const [offerAction, setOfferAction] = useState<"accept" | "reject" | null>(null);
+
+    // Helper functions
+    const formatAddress = (address: string): string => {
+        if (!address) return "Unknown";
+        const cleanAddress = address.includes(":") ? address.split(":").pop() || address : address;
+        return `${cleanAddress.slice(0, 6)}...${cleanAddress.slice(-4)}`;
+    };
+
+    const formatPrice = (price: string, decimals: number = 18): string => {
+        try {
+            const ethPrice = parseInt(price) / Math.pow(10, decimals);
+            return ethPrice.toFixed(3);
+        } catch {
+            return "0.000";
+        }
+    };
+
+    const getUSDPrice = (price: string, usdRate: number, decimals: number = 18): string => {
+        try {
+            const ethPrice = parseInt(price) / Math.pow(10, decimals);
+            return (ethPrice * usdRate).toFixed(0);
+        } catch {
+            return "0";
+        }
+    };
 
     const handleBackClick = () => {
         router.back();
@@ -44,8 +77,7 @@ export function DomainDetailPage({ domain }: DomainDetailPageProps) {
     };
 
     const handleOfferClick = () => {
-        console.log("Make offer for:", domain.name);
-        // Implement offer functionality here
+        setShowOfferPopup(true);
     };
 
     const handleContactOwner = () => {
@@ -80,6 +112,17 @@ export function DomainDetailPage({ domain }: DomainDetailPageProps) {
         }
     };
 
+    // Get the primary token and listing
+    const primaryToken = domain.tokens && domain.tokens.length > 0 ? domain.tokens[0] : null;
+    const primaryListing = primaryToken?.listings?.[0];
+    const isListed = !!primaryListing;
+
+    // Fetch offers for this domain
+    const { data: offersData } = useOffers({
+        tokenId: primaryToken?.tokenId,
+        take: 10,
+    });
+
      return (
          <div className="min-h-screen bg-[#2b2b2b] text-white">
              {/* Domain Image - Full Width, 560px Height */}
@@ -94,7 +137,7 @@ export function DomainDetailPage({ domain }: DomainDetailPageProps) {
                          </div>
                      </div>
                  </div>
-                 
+
                  {/* Back Button - Positioned on the image */}
                  <div className="absolute top-6 left-6">
                      <Button
@@ -106,8 +149,8 @@ export function DomainDetailPage({ domain }: DomainDetailPageProps) {
                          Back
                      </Button>
                  </div>
-                 
-                 {domain.isListed && (
+
+                 {isListed && (
                      <div className="absolute top-6 right-6">
                          <Badge className="bg-green-500 text-white text-lg px-4 py-2">
                              <Star className="w-5 h-5 mr-2 fill-current" />
@@ -124,12 +167,12 @@ export function DomainDetailPage({ domain }: DomainDetailPageProps) {
                      {/* Left Side - Domain Info */}
                      <div className="flex-1 text-center lg:text-left">
                          {/* Domain Name */}
-                         <h1 className="text-5xl font-bold text-white mb-6">{domain.name || domain.data?.name?.name}</h1>
+                         <h1 className="text-5xl font-bold text-white mb-6">{domain.name}</h1>
 
                          {/* Creation Date */}
                          <div className="mb-4">
                              <div className="text-xl text-white/80">
-                                 Created on {new Date(domain.data?.name?.tokens?.[0]?.createdAt || domain.data?.name?.activities?.[0]?.createdAt || '2023-01-01').toLocaleDateString('en-US', {
+                                 Created on {new Date(primaryToken?.createdAt || domain.tokenizedAt).toLocaleDateString('en-US', {
                                      year: 'numeric',
                                      month: 'long',
                                      day: 'numeric'
@@ -138,45 +181,46 @@ export function DomainDetailPage({ domain }: DomainDetailPageProps) {
                          </div>
 
                          {/* Current Price */}
-                         {domain.data?.name?.tokens?.[0]?.listings?.[0] && (
+                         {primaryListing && (
                              <div className="mb-6">
                                  <div className="text-3xl font-bold text-[#A259FF]">
-                                     {(parseInt(domain.data.name.tokens[0].listings[0].price) / Math.pow(10, 18)).toFixed(3)} ETH
+                                     {formatPrice(primaryListing.price, primaryListing.currency.decimals)} {primaryListing.currency.symbol}
                                  </div>
-                                 <div className="text-lg text-white/80">
-                                     ~${((parseInt(domain.data.name.tokens[0].listings[0].price) / Math.pow(10, 18)) * domain.data.name.tokens[0].listings[0].currency.usdExchangeRate).toFixed(0)} USD
-                                 </div>
+                                 {primaryListing.currency.symbol !== 'USD' && primaryListing.currency.symbol !== 'USDC' && (
+                                     <div className="text-lg text-white/80">
+                                         ~${formatPrice(primaryListing.price, primaryListing.currency.decimals) * (primaryListing.currency.usdExchangeRate || 1)} USD
+                                     </div>
+                                 )}
                              </div>
                          )}
 
-                         {/* Created by Address */}
+                         {/* Owned by Address */}
                          <div className="mb-8">
-                             <div className="text-lg text-white/60 mb-2">Created by</div>
+                             <div className="text-lg text-white/60 mb-2">Owned by</div>
                              <div className="text-sm text-white font-mono max-w-fit">
-                                 {(() => {
-                                     const address = domain.data?.name?.tokens?.[0]?.ownerAddress?.split(':').pop() || domain.owner || 'Unknown';
-                                     return address.length > 20 ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
-                                 })()}
+                                 {formatAddress(primaryToken?.ownerAddress || domain.claimedBy || "")}
                              </div>
                          </div>
                      </div>
 
                      {/* Right Side - Countdown Timer */}
-                     <div className="bg-[#3b3b3b] rounded-[20px] p-8 border border-[#A259FF]/20 min-w-[400px]">
-                         <div className="text-center">
-                             <h3 className="text-2xl font-bold text-white mb-4">Auction Ends In</h3>
-                             <CountdownTimer endDate={new Date(domain.data?.name?.tokens?.[0]?.listings?.[0]?.expiresAt || Date.now() + 2 * 24 * 60 * 60 * 1000)} />
+                     {primaryListing && (
+                         <div className="bg-[#3b3b3b] rounded-[20px] p-8 border border-[#A259FF]/20 min-w-[400px]">
+                             <div className="text-center">
+                                 <h3 className="text-2xl font-bold text-white mb-4">Listing Expires In</h3>
+                                 <CountdownTimer endDate={new Date(primaryListing.expiresAt)} />
+                             </div>
+                             <div className="text-center mt-6">
+                                 <Button
+                                     className="bg-[#A259FF] hover:bg-[#A259FF]/90 text-white py-6 px-12 rounded-[20px] text-2xl font-bold"
+                                     onClick={handleOfferClick}
+                                 >
+                                     <DollarSign className="w-8 h-8 mr-3" />
+                                     Place Bid
+                                 </Button>
+                             </div>
                          </div>
-                         <div className="text-center mt-6">
-                             <Button
-                                 className="bg-[#A259FF] hover:bg-[#A259FF]/90 text-white py-6 px-12 rounded-[20px] text-2xl font-bold"
-                                 onClick={handleOfferClick}
-                             >
-                                 <DollarSign className="w-8 h-8 mr-3" />
-                                 Place Bid
-                             </Button>
-                         </div>
-                     </div>
+                     )}
                  </div>
              </div>
 
@@ -192,42 +236,79 @@ export function DomainDetailPage({ domain }: DomainDetailPageProps) {
                                  Domain History
                              </h3>
                              <div className="space-y-4">
-                                 {domain.history.map((event: any, index: number) => (
-                                     <div key={index} className="flex items-center gap-4 p-4">
-                                         <div className="w-3 h-3 bg-[#A259FF] rounded-full"></div>
-                                         <div className="flex-1">
-                                             <div className="text-white font-medium">{event.event}</div>
-                                             <div className="text-white/60 text-sm">{event.date}</div>
-                                         </div>
-                                         <div className="text-[#A259FF] font-semibold">{event.price}</div>
+                                 {domain.activities && domain.activities.length > 0 ? (
+                                     domain.activities
+                                         .filter(activity => activity && activity.type) // Filter out empty objects
+                                         .map((activity, index) => (
+                                             <div key={index} className="flex items-center gap-4 p-4">
+                                                 <div className="w-3 h-3 bg-[#A259FF] rounded-full"></div>
+                                                 <div className="flex-1">
+                                                     <div className="text-white font-medium">{activity.type}</div>
+                                                     <div className="text-white/60 text-sm">
+                                                         {activity.sld && activity.tld && `${activity.sld}.${activity.tld} • `}
+                                                         {new Date(activity.createdAt).toLocaleDateString()}
+                                                     </div>
+                                                 </div>
+                                                 {activity.txHash && (
+                                                     <div className="text-[#A259FF] font-semibold">
+                                                         <a
+                                                             href={`https://explorer-testnet.doma.xyz/tx/${activity.txHash}`}
+                                                             target="_blank"
+                                                             rel="noopener noreferrer"
+                                                             className="hover:underline"
+                                                         >
+                                                             View TX
+                                                         </a>
+                                                     </div>
+                                                 )}
+                                             </div>
+                                         ))
+                                 ) : (
+                                     <div className="text-center py-8">
+                                         <p className="text-white/60">No history available for this domain.</p>
                                      </div>
-                                 ))}
+                                 )}
                              </div>
                          </div>
 
-                        {/* Similar Domains */}
-                        <div>
-                            <h3 className="text-2xl font-bold text-white flex items-center gap-2 mb-6">
-                                <Globe className="w-6 h-6 text-[#A259FF]" />
-                                Similar Domains
-                            </h3>
-                            <div className="grid gap-4">
-                                {domain.similarDomains.map((similar: any, index: number) => (
-                                    <div key={index} className="flex items-center justify-between p-4">
-                                        <div>
-                                            <div className="text-white font-medium">{similar.name}</div>
-                                            <div className="text-white/60 text-sm">{similar.owner}</div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-[#A259FF] font-semibold">{similar.price}</div>
-                                            <Button size="sm" variant="outline" className="mt-2 text-xs">
-                                                View
-                                            </Button>
-                                        </div>
+                        {/* Token Information */}
+                        {primaryToken && (
+                            <div>
+                                <h3 className="text-2xl font-bold text-white flex items-center gap-2 mb-6">
+                                    <Tag className="w-6 h-6 text-[#A259FF]" />
+                                    Token Information
+                                </h3>
+                                <div className="bg-[#3b3b3b] rounded-[20px] p-6 space-y-4">
+                                    <div className="flex justify-between">
+                                        <span className="text-white/80">Token ID</span>
+                                        <span className="text-white font-mono text-sm">
+                                            {primaryToken.tokenId.slice(0, 10)}...{primaryToken.tokenId.slice(-8)}
+                                        </span>
                                     </div>
-                                ))}
+                                    <div className="flex justify-between">
+                                        <span className="text-white/80">Token Address</span>
+                                        <span className="text-white font-mono text-sm">
+                                            {formatAddress(primaryToken.tokenAddress)}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-white/80">Network</span>
+                                        <span className="text-white">{primaryToken.chain.name}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-white/80">Explorer</span>
+                                        <a
+                                            href={primaryToken.explorerUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[#A259FF] hover:underline"
+                                        >
+                                            View on Explorer
+                                        </a>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* Sidebar */}
@@ -237,23 +318,37 @@ export function DomainDetailPage({ domain }: DomainDetailPageProps) {
                             <h3 className="text-xl font-bold text-white mb-4">Domain Stats</h3>
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-white/80">Category</span>
-                                    <Badge className="bg-[#A259FF]/20 text-[#A259FF]">{domain.category}</Badge>
+                                    <span className="text-white/80">TLD</span>
+                                    <Badge className="bg-[#A259FF]/20 text-[#A259FF]">.{domain.name.split('.').pop()}</Badge>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <span className="text-white/80">Status</span>
-                                    <Badge className={domain.isListed ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}>
-                                        {domain.isListed ? 'Listed' : 'Not Listed'}
+                                    <Badge className={isListed ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}>
+                                        {isListed ? 'Listed' : 'Not Listed'}
                                     </Badge>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                    <span className="text-white/80">Views</span>
-                                    <span className="text-white">1,234</span>
+                                    <span className="text-white/80">Registrar</span>
+                                    <span className="text-white text-sm">{domain.registrar.name}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                    <span className="text-white/80">Followers</span>
-                                    <span className="text-white">56</span>
+                                    <span className="text-white/80">Expires</span>
+                                    <span className="text-white text-sm">{new Date(domain.expiresAt).toLocaleDateString()}</span>
                                 </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-white/80">Transfer Lock</span>
+                                    <Badge className={domain.transferLock ? "bg-yellow-500/20 text-yellow-400" : "bg-green-500/20 text-green-400"}>
+                                        {domain.transferLock ? 'Enabled' : 'Disabled'}
+                                    </Badge>
+                                </div>
+                                {domain.isFractionalized !== undefined && (
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-white/80">Fractionalized</span>
+                                        <Badge className={domain.isFractionalized ? "bg-blue-500/20 text-blue-400" : "bg-gray-500/20 text-gray-400"}>
+                                            {domain.isFractionalized ? 'Yes' : 'No'}
+                                        </Badge>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -261,13 +356,15 @@ export function DomainDetailPage({ domain }: DomainDetailPageProps) {
                         <div>
                             <h3 className="text-xl font-bold text-white mb-4">Quick Actions</h3>
                             <div className="space-y-3">
-                                <Button
-                                    className="w-full bg-[#A259FF] hover:bg-[#A259FF]/90 text-white rounded-[15px]"
-                                    onClick={handleBuyClick}
-                                >
-                                    <DollarSign className="w-4 h-4 mr-2" />
-                                    Buy Domain
-                                </Button>
+                                {isListed && (
+                                    <Button
+                                        className="w-full bg-[#A259FF] hover:bg-[#A259FF]/90 text-white rounded-[15px]"
+                                        onClick={handleBuyClick}
+                                    >
+                                        <DollarSign className="w-4 h-4 mr-2" />
+                                        Buy Domain
+                                    </Button>
+                                )}
                                 <Button
                                     variant="outline"
                                     className="w-full border-[#A259FF] text-[#A259FF] hover:bg-[#A259FF] hover:text-white rounded-[15px]"
@@ -283,19 +380,99 @@ export function DomainDetailPage({ domain }: DomainDetailPageProps) {
                                     <MessageCircle className="w-4 h-4 mr-2" />
                                     Contact Owner
                                 </Button>
-                                <Button
-                                    variant="ghost"
-                                    className="w-full text-white/60 hover:text-white hover:bg-white/10 rounded-[15px]"
-                                    onClick={() => window.open(`https://etherscan.io/address/${domain.owner}`, '_blank')}
-                                >
-                                    <ExternalLink className="w-4 h-4 mr-2" />
-                                    View on Explorer
-                                </Button>
+                                {primaryToken?.explorerUrl && (
+                                    <Button
+                                        variant="ghost"
+                                        className="w-full text-white/60 hover:text-white hover:bg-white/10 rounded-[15px]"
+                                        onClick={() => window.open(primaryToken.explorerUrl, '_blank')}
+                                    >
+                                        <ExternalLink className="w-4 h-4 mr-2" />
+                                        View on Explorer
+                                    </Button>
+                                )}
                             </div>
                         </div>
+
+                        {/* Offers Section */}
+                        {offersData && offersData.pages[0]?.items.length > 0 && (
+                            <div>
+                                <h3 className="text-xl font-bold text-white mb-4">Active Offers</h3>
+                                <div className="space-y-3">
+                                    {offersData.pages[0].items.slice(0, 5).map((offer, index) => (
+                                        <div
+                                            key={index}
+                                            className="bg-[#3b3b3b] rounded-[15px] p-4 border border-[#A259FF]/20"
+                                        >
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 bg-[#A259FF]/20 rounded-full flex items-center justify-center">
+                                                        <DollarSign className="w-4 h-4 text-[#A259FF]" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-white font-semibold">
+                                                            {(Number(offer.price) / Math.pow(10, offer.currency.decimals)).toFixed(3)} {offer.currency.symbol}
+                                                        </div>
+                                                        <div className="text-white/60 text-sm">
+                                                            {formatAddress(offer.offererAddress)}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            setSelectedOffer(offer);
+                                                            setOfferAction("accept");
+                                                            setShowAcceptRejectPopup(true);
+                                                        }}
+                                                        className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1"
+                                                    >
+                                                        Accept
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => {
+                                                            setSelectedOffer(offer);
+                                                            setOfferAction("reject");
+                                                            setShowAcceptRejectPopup(true);
+                                                        }}
+                                                        className="border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs px-3 py-1"
+                                                    >
+                                                        Reject
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                            <div className="text-white/60 text-xs">
+                                                Expires: {offer.expiresAt ? new Date(offer.expiresAt).toLocaleDateString() : 'No expiration'}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
+
+            {/* Offer Popups */}
+            <OfferPopup
+                isOpen={showOfferPopup}
+                onClose={() => setShowOfferPopup(false)}
+                domain={domain}
+            />
+
+            <AcceptRejectOfferPopup
+                isOpen={showAcceptRejectPopup}
+                onClose={() => {
+                    setShowAcceptRejectPopup(false);
+                    setSelectedOffer(null);
+                    setOfferAction(null);
+                }}
+                offer={selectedOffer}
+                action={offerAction}
+                domainName={domain.name}
+            />
         </div>
     );
 }
