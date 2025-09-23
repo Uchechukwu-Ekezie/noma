@@ -18,6 +18,15 @@ export const metadata: Metadata = {
   },
   description:
     "Noma is a cutting-edge web application built with Next.js, TypeScript, and Tailwind CSS. Experience modern design with premium user interface and seamless performance.",
+  icons: {
+    icon: "/noma_logo.svg",
+    shortcut: "/noma_logo.svg",
+    apple: "/nomalogo.png",
+    other: {
+      rel: "apple-touch-icon-precomposed",
+      url: "/nomalogo.png",
+    },
+  },
   keywords: [
     "noma",
     "nextjs",
