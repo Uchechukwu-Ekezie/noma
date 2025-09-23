@@ -24,7 +24,8 @@ import {
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CollectionsBrowser } from "./collections-browser";
-import { useListings, useSearchDomains, useTrendingDomains } from "@/hooks/use-doma";
+import { TrendingDomains } from "@/components/trending-domains";
+import { useListings, useSearchDomains } from "@/hooks/use-doma";
 import type { NameModel, NameListingModel } from "@/types/doma";
 
 // Categories for filtering
@@ -98,13 +99,6 @@ export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowser
     isLoading: isLoadingSearch,
     error: searchError,
   } = useSearchDomains(searchQuery, { take: 12 });
-
-  // Fetch trending domains for featured section
-  const {
-    data: trendingDomains,
-    isLoading: isLoadingTrending,
-    error: trendingError,
-  } = useTrendingDomains(6);
 
   // Determine which data to show
   const currentData = isSearching ? searchData : listingsData;
@@ -236,65 +230,6 @@ export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowser
               </div>
             )}
 
-            {/* Trending Domains Section */}
-            {!isSearching && (
-              <Card className="bg-[#3b3b3b] border-[#A259FF]/20 mb-8">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-white">
-                    <TrendingUp className="h-5 w-5 text-[#A259FF]" />
-                    Featured Domains
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {isLoadingTrending ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-[#A259FF]" />
-                      <span className="ml-2 text-[#A259FF]/80">Loading featured domains...</span>
-                    </div>
-                  ) : trendingError ? (
-                    <div className="text-center py-8">
-                      <p className="text-red-400">Failed to load featured domains</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {trendingDomains?.slice(0, 6).map((domain) => (
-                        <Card
-                          key={domain.name}
-                          className="bg-[#2b2b2b] border-[#A259FF]/20 cursor-pointer hover:border-[#A259FF]/40 transition-colors"
-                          onClick={() => handleDomainClick(domain.name)}
-                        >
-                          <CardContent className="p-4">
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <h3 className="font-semibold text-white truncate">{domain.name}</h3>
-                                <Badge variant="secondary" className="text-xs">
-                                  Featured
-                                </Badge>
-                              </div>
-                              {domain.tokens?.[0]?.listings?.[0] && (
-                                <div className="flex items-center gap-2 text-sm">
-                                  <DollarSign className="h-4 w-4 text-[#A259FF]" />
-                                  <span className="text-[#A259FF] font-medium">
-                                    {formatPrice(
-                                      domain.tokens[0].listings[0].price,
-                                      domain.tokens[0].listings[0].currency.symbol
-                                    )}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-2 text-xs text-[#A259FF]/60">
-                                <User className="h-3 w-3" />
-                                <span>{formatAddress(domain.claimedBy || "")}</span>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
           </div>
 
           {/* Domain Grid */}

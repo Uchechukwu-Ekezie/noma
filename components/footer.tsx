@@ -1,53 +1,61 @@
 import Link from "next/link";
-import { 
-  Twitter, 
-  Linkedin, 
-  Github, 
+import Image from "next/image";
+import {
+  Twitter,
+  Linkedin,
+  Github,
   ArrowRight,
   Globe,
   MessageCircle,
   Search,
   Home,
-  Mail
+  Mail,
 } from "lucide-react";
 
 export function Footer() {
   return (
     <footer className="bg-[#2b2b2b] border-t border-[#A259FF]/20">
-      <div className="container mx-auto px-4 py-16">
+      <div className="container px-4 py-16 mx-auto">
         {/* Main Footer Content */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+        <div className="grid grid-cols-1 gap-8 mb-12 md:grid-cols-2 lg:grid-cols-4">
           {/* Company Info */}
           <div className="space-y-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[#A259FF] rounded-lg flex items-center justify-center">
-                <Globe className="w-6 h-6 text-white" />
+              <div className="flex items-center justify-center w-10 h-10 rounded-lg">
+                <Image
+                  src="/noma_logo.svg"
+                  alt="Noma Logo"
+                  width={40}
+                  height={40}
+                  className="w-10 h-10"
+                />
               </div>
               <span className="text-2xl font-bold text-[#A259FF]">Noma</span>
             </div>
-            <p className="text-white/80 leading-relaxed">
-              A modern web application platform built with Next.js, TypeScript, and Tailwind CSS. 
-              Experience the future of web development.
+            <p className="leading-relaxed text-white/80">
+              The premier Web3 domain marketplace. Discover, buy, and trade
+              blockchain domains across multiple networks. Your gateway to the
+              decentralized web.
             </p>
             <div className="flex gap-4">
-              <a 
-                href="https://twitter.com" 
+              <a
+                href="https://twitter.com/noma_domains"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-[#3b3b3b] rounded-lg flex items-center justify-center hover:bg-[#A259FF] transition-colors"
               >
                 <Twitter className="w-5 h-5 text-white/80 hover:text-white" />
               </a>
-              <a 
-                href="https://linkedin.com" 
+              <a
+                href="https://linkedin.com/company/noma-domains"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-[#3b3b3b] rounded-lg flex items-center justify-center hover:bg-[#A259FF] transition-colors"
               >
                 <Linkedin className="w-5 h-5 text-white/80 hover:text-white" />
               </a>
-              <a 
-                href="https://github.com" 
+              <a
+                href="https://github.com/noma-domains"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-[#3b3b3b] rounded-lg flex items-center justify-center hover:bg-[#A259FF] transition-colors"
@@ -62,8 +70,8 @@ export function Footer() {
             <h3 className="text-xl font-bold text-white">Navigation</h3>
             <ul className="space-y-4">
               <li>
-                <Link 
-                  href="/" 
+                <Link
+                  href="/"
                   className="text-white/80 hover:text-[#A259FF] transition-colors flex items-center gap-2"
                 >
                   <Home className="w-4 h-4" />
@@ -71,8 +79,8 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link 
-                  href="/marketplace" 
+                <Link
+                  href="/marketplace"
                   className="text-white/80 hover:text-[#A259FF] transition-colors flex items-center gap-2"
                 >
                   <Search className="w-4 h-4" />
@@ -80,8 +88,8 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link 
-                  href="/messages" 
+                <Link
+                  href="/messages"
                   className="text-white/80 hover:text-[#A259FF] transition-colors flex items-center gap-2"
                 >
                   <MessageCircle className="w-4 h-4" />
@@ -89,8 +97,8 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link 
-                  href="/portfolio" 
+                <Link
+                  href="/portfolio"
                   className="text-white/80 hover:text-[#A259FF] transition-colors flex items-center gap-2"
                 >
                   <Globe className="w-4 h-4" />
@@ -105,8 +113,8 @@ export function Footer() {
             <h3 className="text-xl font-bold text-white">Support</h3>
             <ul className="space-y-4">
               <li>
-                <Link 
-                  href="/messages" 
+                <Link
+                  href="/messages"
                   className="text-white/80 hover:text-[#A259FF] transition-colors flex items-center gap-2"
                 >
                   <MessageCircle className="w-4 h-4" />
@@ -114,8 +122,8 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a 
-                  href="mailto:support@noma.app" 
+                <a
+                  href="mailto:support@noma.domains"
                   className="text-white/80 hover:text-[#A259FF] transition-colors flex items-center gap-2"
                 >
                   <Mail className="w-4 h-4" />
@@ -123,23 +131,25 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <a 
-                  href="https://github.com" 
+                <a
+                  href="https://docs.noma.domains"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-white/80 hover:text-[#A259FF] transition-colors flex items-center gap-2"
                 >
-                  <Github className="w-4 h-4" />
-                  GitHub
+                  <Globe className="w-4 h-4" />
+                  Documentation
                 </a>
               </li>
               <li>
-                <a 
-                  href="#" 
+                <a
+                  href="https://status.noma.domains"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-white/80 hover:text-[#A259FF] transition-colors flex items-center gap-2"
                 >
                   <Globe className="w-4 h-4" />
-                  Documentation
+                  Service Status
                 </a>
               </li>
             </ul>
@@ -149,7 +159,8 @@ export function Footer() {
           <div className="space-y-6">
             <h3 className="text-xl font-bold text-white">Stay Updated</h3>
             <p className="text-white/80">
-              Get the latest updates and news about Noma delivered to your inbox.
+              Get the latest Web3 domain trends, new listings, and marketplace
+              updates delivered to your inbox.
             </p>
             <div className="space-y-4">
               <div className="flex gap-2">
@@ -171,41 +182,52 @@ export function Footer() {
 
         {/* Stats Section */}
         <div className="border-t border-[#A259FF]/20 pt-8 mb-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
             <div className="text-center">
-              <div className="text-3xl font-bold text-[#A259FF] mb-2">1K+</div>
-              <div className="text-sm text-white/80">Active Users</div>
+              <div className="text-3xl font-bold text-[#A259FF] mb-2">10K+</div>
+              <div className="text-sm text-white/80">Domains Listed</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-[#A259FF] mb-2">5K+</div>
-              <div className="text-sm text-white/80">Projects Built</div>
+              <div className="text-3xl font-bold text-[#A259FF] mb-2">
+                2.5K+
+              </div>
+              <div className="text-sm text-white/80">Active Traders</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-[#A259FF] mb-2">99.9%</div>
-              <div className="text-sm text-white/80">Uptime</div>
+              <div className="text-3xl font-bold text-[#A259FF] mb-2">50+</div>
+              <div className="text-sm text-white/80">Network Chains</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-[#A259FF] mb-2">24/7</div>
-              <div className="text-sm text-white/80">Support</div>
+              <div className="text-sm text-white/80">Marketplace</div>
             </div>
           </div>
         </div>
 
         {/* Bottom Bar */}
         <div className="border-t border-[#A259FF]/20 pt-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="text-white/60 text-sm">
-              © 2024 Noma. All rights reserved.
+          <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
+            <div className="text-sm text-white/60">
+              © 2025 Noma Domains. All rights reserved.
             </div>
             <div className="flex gap-6 text-sm">
-              <a href="#" className="text-white/60 hover:text-[#A259FF] transition-colors">
+              <a
+                href="/privacy"
+                className="text-white/60 hover:text-[#A259FF] transition-colors"
+              >
                 Privacy Policy
               </a>
-              <a href="#" className="text-white/60 hover:text-[#A259FF] transition-colors">
+              <a
+                href="/terms"
+                className="text-white/60 hover:text-[#A259FF] transition-colors"
+              >
                 Terms of Service
               </a>
-              <a href="#" className="text-white/60 hover:text-[#A259FF] transition-colors">
-                Cookie Policy
+              <a
+                href="/security"
+                className="text-white/60 hover:text-[#A259FF] transition-colors"
+              >
+                Security Policy
               </a>
             </div>
           </div>
