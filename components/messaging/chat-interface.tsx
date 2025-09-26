@@ -17,12 +17,15 @@ import {
   Wifi,
   WifiOff,
   MessageCircle,
-  Users
+  Users,
+  RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useXMTP } from "@/contexts/xmtp-context";
 import { usePrivy } from "@privy-io/react-auth";
 import { useToast } from "@/hooks/use-toast";
+import { getDomainAvatarUrl, getConversationAvatarUrl } from "@/lib/avatar-utils";
+import type { Dm } from "@xmtp/browser-sdk";
 
 // Mock data for XMTP demonstration
 const mockChats = [
@@ -138,8 +141,13 @@ const mockChats = [
   }
 ];
 
-export function ChatInterface() {
-  const { client, isLoading, isInitialized, error, canMessage, initializeClient } = useXMTP();
+interface ChatInterfaceProps {
+  contactAddress?: string | null;
+  domainName?: string | null;
+}
+
+export function ChatInterface({ contactAddress, domainName }: ChatInterfaceProps) {
+  const { client, isLoading, isInitialized, error, canMessage, initializeClient, revokeInstallations, clearLocalData } = useXMTP();
   const { authenticated, user } = usePrivy();
   const { toast } = useToast();
 
@@ -154,94 +162,176 @@ export function ChatInterface() {
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [groupMembers, setGroupMembers] = useState("");
   const [groupName, setGroupName] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Load conversations when XMTP client is ready
-  const loadConversations = useCallback(async () => {
-    if (!client) return;
+  // Domain_space deduplication utility
+  const deduplicateConversations = useCallback((conversations: any[]) => {
+    const seen = new Set();
+    return conversations.filter(conv => {
+      if (!conv || !conv.id) return false;
+      if (seen.has(conv.id)) return false;
+      seen.add(conv.id);
+      return true;
+    });
+  }, []);
+
+  // Domain_space approach - getPeerAddress utility
+  const getPeerAddress = useCallback(async (conversation: Dm) => {
+    try {
+      // Method 1: Try peerInboxId approach (domain_space preferred method)
+      const peerInboxId = await conversation.peerInboxId();
+      if (peerInboxId && client) {
+        const state = await client.preferences.inboxStateFromInboxIds([peerInboxId]);
+        const address = state?.[0]?.identifiers?.[0]?.identifier;
+        if (address && address.startsWith('0x') && address.length === 42) {
+          return address;
+        }
+      }
+    } catch (error) {
+      console.log('peerInboxId method failed, trying members...', error);
+    }
 
     try {
-      console.log('Loading XMTP conversations...');
-      const convos = await client.conversations.list();
-      console.log('Loaded conversations:', convos.length);
-      console.log('Conversation types:', convos.map(c => ({ id: c.id, type: c.type, peerAddress: c.peerAddress })));
+      // Method 2: Try members approach as fallback
+      const members = await conversation.members();
+      const address = (members?.[0] as { identifier?: string })?.identifier;
+      if (address && address.startsWith('0x') && address.length === 42) {
+        return address;
+      }
+    } catch (error) {
+      console.log('members method failed', error);
+    }
 
-      // Convert XMTP conversations to our format
-      const formattedConvos = await Promise.all(
-        convos.map(async (convo) => {
+    return null; // Return null for invalid addresses
+  }, [client]);
+
+  // Load conversations - EXACT domain_space implementation
+  const loadConversations = useCallback(async () => {
+    if (!client) {
+      console.log('No XMTP client available');
+      return;
+    }
+
+    setIsRefreshing(true);
+    try {
+      console.log('🔄 Loading conversations (domain_space approach)...');
+
+      // Force sync all conversations and messages like domain_space
+      await client.conversations.syncAll();
+
+      // Add delay to ensure sync completes like domain_space
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Load DMs with BOTH allowed and unknown consent states (CRITICAL for domain_space compatibility)
+      console.log('🔄 Loading DMs with consent states...');
+      const allConversations = await client.conversations.listDms();
+      console.log('📬 Total conversations loaded:', allConversations.length);
+
+      // Filter for DM conversations only, excluding group chats (domain_space approach)
+      const dms = allConversations.filter((conv) =>
+        'peerInboxId' in conv && typeof conv.peerInboxId === 'function'
+      ) as Dm[];
+
+      console.log('💬 DM conversations found:', dms.length);
+
+      if (dms.length === 0) {
+        console.log('📭 No DM conversations found');
+        setConversations([]);
+        return;
+      }
+
+      // Process each DM conversation (domain_space approach)
+      console.log('🔄 Processing DM conversations...');
+      const enhancedConversations = await Promise.all(
+        dms.map(async (dm, index) => {
           try {
-            const messages = await convo.messages();
-            const lastMessage = messages[messages.length - 1];
+            console.log(`📝 Processing DM ${index + 1}/${dms.length}:`, dm.id);
 
-            // Determine if this is a group or DM
-            // DMs have peerAddress, groups don't
-            const isGroup = !convo.peerAddress && (convo.type === 'group' || !!convo.members);
-
-            console.log('Conversation detection:', {
-              id: convo.id || convo.topic,
-              peerAddress: convo.peerAddress,
-              type: convo.type,
-              hasMembers: !!convo.members,
-              isGroup,
-            });
-
-            let address = '';
-            let memberCount = 0;
-
-            if (isGroup) {
-              // For groups, use the group name or a default
-              address = `Group: ${convo.name || 'Unnamed Group'}`;
-              memberCount = convo.members ? convo.members.length : 0;
-            } else {
-              // For DMs, use the peer address
-              address = convo.peerAddress || 'Unknown';
+            // Get peer address using domain_space utility
+            const peerAddress = await getPeerAddress(dm);
+            if (!peerAddress) {
+              console.log(`❌ No valid peer address for DM ${index + 1} - skipping`);
+              return null;
             }
 
+            console.log(`✅ Valid DM ${index + 1} with peer:`, peerAddress);
+
+            // Load messages like domain_space (with filtering for text messages)
+            let messages = [];
+            try {
+              const msgs = await dm.messages();
+              // Filter for text messages only like domain_space does
+              messages = msgs.filter((msg: any) => {
+                const isText = typeof msg.content === "string" &&
+                              msg.content !== "" &&
+                              !msg.content.startsWith("{") && // Filter out JSON system messages
+                              !msg.content.includes("initiatedByInboxId"); // Filter out conversation creation messages
+                return isText;
+              });
+              console.log(`📬 Loaded ${messages.length} text messages for DM ${index + 1}`);
+            } catch (messageError) {
+              console.warn(`❌ Failed to load messages for DM ${index + 1}:`, messageError);
+            }
+
+            const lastMessage = messages[messages.length - 1];
+
             return {
-              id: convo.id || convo.topic,
-              address,
+              id: dm.id,
+              address: peerAddress,
               lastMessage: lastMessage?.content || "No messages yet",
-              timestamp: lastMessage ? new Date(lastMessage.sent).toLocaleTimeString() : "Now",
-              unreadCount: 0, // TODO: Implement unread count
-              isOnline: false, // TODO: Implement online status
-              conversation: convo,
-              isGroup,
-              memberCount: isGroup ? memberCount : undefined,
+              timestamp: lastMessage
+                ? new Date(Number(lastMessage.sentAtNs) / 1_000_000).toLocaleTimeString()
+                : "Now",
+              unreadCount: 0, // Domain_space calculates this differently - we can enhance later
+              isOnline: false,
+              conversation: dm, // Store the original XMTP DM object
+              isGroup: false,
+              memberCount: undefined,
             };
           } catch (error) {
-            console.error('Error processing conversation:', error);
-            // Return a basic conversation object if processing fails
-            return {
-              id: convo.id || convo.topic || Date.now().toString(),
-              address: 'Unknown',
-              lastMessage: "Error loading conversation",
-              timestamp: "Now",
-              unreadCount: 0,
-              isOnline: false,
-              conversation: convo,
-              isGroup: false,
-            };
+            console.error(`Error processing DM ${index + 1}:`, error);
+            return null;
           }
         })
       );
 
-      setConversations(formattedConvos);
+      // Filter out null entries and sort by timestamp (domain_space approach)
+      const validConversations = enhancedConversations
+        .filter(Boolean)
+        .sort((a, b) => {
+          // Sort by most recent first
+          const timeA = a.timestamp !== "Now" ? new Date(a.timestamp).getTime() : Date.now();
+          const timeB = b.timestamp !== "Now" ? new Date(b.timestamp).getTime() : Date.now();
+          return timeB - timeA;
+        });
 
-      // Select first conversation if none selected
-      if (formattedConvos.length > 0 && !selectedConversation) {
-        setSelectedConversation(formattedConvos[0]);
+      console.log('✅ Successfully processed', validConversations.length, 'conversations');
+
+      // Apply deduplication like domain_space
+      const deduplicatedConversations = deduplicateConversations(validConversations);
+      console.log('🔄 After deduplication:', deduplicatedConversations.length, 'conversations');
+
+      setConversations(deduplicatedConversations);
+
+      // Auto-select first conversation if none selected
+      if (deduplicatedConversations.length > 0 && !selectedConversation) {
+        setSelectedConversation(deduplicatedConversations[0]);
+        console.log('🎯 Auto-selected first conversation:', deduplicatedConversations[0].address);
       }
     } catch (error) {
       console.error('Error loading conversations:', error);
       toast({
         title: "Error Loading Conversations",
-        description: "Failed to load your messages. Please try again.",
+        description: "Failed to load your messages. Check console for details and try refreshing.",
         variant: "destructive",
       });
+    } finally {
+      setIsRefreshing(false);
     }
   }, [client, selectedConversation, toast]);
 
@@ -253,14 +343,35 @@ export function ChatInterface() {
     try {
       const msgs = await selectedConversation.conversation.messages();
 
-      const formattedMessages = msgs.map((msg: any) => ({
-        id: msg.id,
-        text: msg.content,
-        sender: msg.senderAddress === user?.wallet?.address ? "me" : "user",
-        timestamp: new Date(msg.sent).toLocaleTimeString(),
-        status: "delivered", // TODO: Implement message status
-        senderAddress: msg.senderAddress,
-      }));
+      const formattedMessages = msgs.map((msg: any) => {
+        let messageText: string;
+
+        if (typeof msg.content === "string") {
+          messageText = msg.content;
+        } else if (msg.content && typeof msg.content === "object") {
+          // Handle system messages (group changes, etc.)
+          if (msg.content.initiatedByInboxId) {
+            messageText = "Group updated";
+          } else if (msg.content.addedInboxes || msg.content.removedInboxes) {
+            messageText = "Group membership changed";
+          } else if (msg.content.metadataFieldChanges) {
+            messageText = "Group metadata updated";
+          } else {
+            messageText = "System message";
+          }
+        } else {
+          messageText = "Unknown message";
+        }
+
+        return {
+          id: msg.id,
+          text: messageText,
+          sender: msg.senderAddress === user?.wallet?.address ? "me" : "user",
+          timestamp: new Date(Number(msg.sentAtNs) / 1_000_000).toLocaleTimeString(),
+          status: "delivered", // TODO: Implement message status
+          senderAddress: msg.senderAddress,
+        };
+      });
 
       setMessages(formattedMessages);
     } catch (error) {
@@ -619,6 +730,21 @@ export function ChatInterface() {
     }
   }, [isInitialized, client, loadConversations]);
 
+  // Auto-populate contact address from URL params
+  useEffect(() => {
+    if (contactAddress && contactAddress.startsWith('0x')) {
+      setNewChatAddress(contactAddress);
+
+      // If we have a domain name, show a helpful toast
+      if (domainName) {
+        toast({
+          title: "Ready to Message",
+          description: `You can now message the owner of ${domainName}`,
+        });
+      }
+    }
+  }, [contactAddress, domainName, toast]);
+
   // Load messages when conversation is selected
   useEffect(() => {
     if (selectedConversation) {
@@ -714,14 +840,54 @@ export function ChatInterface() {
 
   // Show error state
   if (error) {
+    const isInstallationLimitError = error.includes('10/10') || error.includes('Installation limit');
+
     return (
       <div className="flex h-[calc(100vh-120px)] bg-[#2b2b2b] text-white items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <WifiOff className="w-16 h-16 mx-auto mb-4 text-red-500" />
-          <h2 className="text-2xl font-bold text-white mb-2">Connection Error</h2>
+          <h2 className="text-2xl font-bold text-white mb-2">
+            {isInstallationLimitError ? "Installation Limit Reached" : "Connection Error"}
+          </h2>
           <p className="text-white/60 mb-6">
             {error}
           </p>
+
+          {isInstallationLimitError ? (
+            <div className="space-y-3">
+              <div className="bg-[#3b3b3b] rounded-lg p-4 mb-4 text-left">
+                <h3 className="text-sm font-semibold text-[#A259FF] mb-2">Quick fixes:</h3>
+                <ul className="text-sm text-white/80 space-y-1">
+                  <li>• Clear browser data (recommended)</li>
+                  <li>• Use incognito/private mode</li>
+                  <li>• Try a different browser</li>
+                  <li>• Clear local XMTP data</li>
+                </ul>
+              </div>
+              <div className="flex gap-3 justify-center">
+                <Button
+                  onClick={clearLocalData}
+                  className="bg-[#A259FF] hover:bg-[#A259FF]/90 text-white px-6 py-2 rounded-[20px]"
+                >
+                  Clear Local Data
+                </Button>
+                <Button
+                  onClick={initializeClient}
+                  variant="outline"
+                  className="border-[#A259FF] text-[#A259FF] hover:bg-[#A259FF] hover:text-white px-6 py-2 rounded-[20px]"
+                >
+                  Retry Connection
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              onClick={initializeClient}
+              className="bg-[#A259FF] hover:bg-[#A259FF]/90 text-white px-8 py-3 rounded-[20px] font-semibold"
+            >
+              Retry Connection
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -737,6 +903,16 @@ export function ChatInterface() {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-[#A259FF]">Messages</h1>
               {isInitialized && <Wifi className="w-4 h-4 text-green-500" />}
+              <Button
+                onClick={loadConversations}
+                size="sm"
+                variant="ghost"
+                disabled={isRefreshing}
+                className="text-white/60 hover:text-[#A259FF] hover:bg-[#A259FF]/20 p-1 h-auto disabled:opacity-50"
+                title={isRefreshing ? "Refreshing conversations..." : "Refresh conversations"}
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              </Button>
             </div>
             <Button
               size="sm"
@@ -841,6 +1017,11 @@ export function ChatInterface() {
               >
                 <div className="relative mr-3">
                   <Avatar className="w-12 h-12">
+                    <img
+                      src={getConversationAvatarUrl(conv.address, { size: 48 })}
+                      alt={`${conv.address} avatar`}
+                      className="w-full h-full rounded-full object-cover"
+                    />
                     <AvatarFallback className="bg-[#A259FF] text-white">
                       {conv.address.slice(2, 4).toUpperCase()}
                     </AvatarFallback>
@@ -868,7 +1049,7 @@ export function ChatInterface() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <p className="text-sm text-white/80 truncate">
-                        {conv.lastMessage}
+                        {typeof conv.lastMessage === "string" ? conv.lastMessage : "System message"}
                       </p>
                       {conv.isGroup && conv.memberCount && (
                         <span className="text-xs text-white/40 flex-shrink-0">
@@ -907,6 +1088,11 @@ export function ChatInterface() {
 
                   <div className="relative mr-3">
                     <Avatar className="w-10 h-10">
+                      <img
+                        src={getConversationAvatarUrl(selectedConversation.address, { size: 40 })}
+                        alt={`${selectedConversation.address} avatar`}
+                        className="w-full h-full rounded-full object-cover"
+                      />
                       <AvatarFallback className="bg-[#A259FF] text-white">
                         {selectedConversation.address.slice(2, 4).toUpperCase()}
                       </AvatarFallback>
@@ -971,7 +1157,9 @@ export function ChatInterface() {
                           : "bg-[#3b3b3b] text-white"
                       )}
                     >
-                      <p className="text-sm break-words">{message.text}</p>
+                      <p className="text-sm break-words">
+                        {typeof message.text === "string" ? message.text : "Invalid message"}
+                      </p>
                       <div className="flex items-center justify-end mt-1 space-x-1">
                         <span className="text-xs opacity-70">{message.timestamp}</span>
                         {message.sender === "me" && (

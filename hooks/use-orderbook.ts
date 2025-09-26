@@ -6,6 +6,7 @@
 
 import { useCallback } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { useAccount, useWalletClient } from "wagmi";
 import {
   CreateOfferParams,
   CreateOfferResult,
@@ -13,7 +14,6 @@ import {
   AcceptOfferResult,
   CancelOfferParams,
   CancelOfferResult,
-  Currency,
   ApiClient,
   CreateOfferHandler,
   AcceptOfferHandler,
@@ -26,11 +26,10 @@ import {
   RequestOptions,
   OnProgressCallback,
   Caip2ChainId,
-  CurrencyToken
+  CurrencyToken,
+  viemToEthersSigner
 } from "@doma-protocol/orderbook-sdk";
-import { BrowserProvider } from "ethers";
 import { orderbookConfig } from "@/lib/orderbook-config";
-import { toast } from "sonner";
 
 // Utility function to parse CAIP-10 format network IDs
 function parseCAIP10(networkId: string): { namespace: string; chainId: string; address: string | null } {
@@ -46,111 +45,36 @@ function toCAIP2ChainId(chainId: number | string): Caip2ChainId {
   return `eip155:${chainId}` as Caip2ChainId;
 }
 
-// Create a mock wallet client for network switching
-function createMockWalletClient() {
-  return {
-    switchChain: async ({ id }: { id: number }) => {
-      console.log(`🔄 Switching to chain ${id}`);
-
-      // Get the provider from the user's wallet
-      const provider = new BrowserProvider(window.ethereum);
-
-      // Check current network
-      const network = await provider.getNetwork();
-      if (Number(network.chainId) !== id) {
-        try {
-          // First try to switch to the network
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${id.toString(16)}` }],
-          });
-          console.log(`✅ Successfully switched to chain ${id}`);
-        } catch (switchError: any) {
-          console.log(`❌ Switch failed:`, switchError);
-
-          // If the network doesn't exist, try to add it
-          const needsNetworkAddition = switchError.code === 4902 ||
-              switchError.code === -32603 ||
-              switchError.message?.toLowerCase().includes('unrecognized chain') ||
-              switchError.message?.toLowerCase().includes('chain id') ||
-              switchError.message?.includes('wallet_addEthereumChain') ||
-              switchError.message?.includes('does not exist') ||
-              switchError.message?.includes('not found');
-
-          if (needsNetworkAddition) {
-            try {
-              console.log(`🔧 Network not found, attempting to add network for chain ${id}`);
-              const networkParams = getNetworkParams(id);
-              console.log(`Network params to add:`, networkParams);
-
-              await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [networkParams],
-              });
-              console.log(`✅ Successfully added and switched to chain ${id}`);
-            } catch (addError: any) {
-              console.error(`❌ Failed to add network:`, addError);
-              throw new Error(`Failed to add network: ${addError.message}`);
-            }
-          } else {
-            console.error(`❌ Failed to switch network (not a missing network error):`, switchError);
-            throw new Error(`Failed to switch network: ${switchError.message}`);
-          }
-        }
-      }
-    }
-  };
-}
-
-// Helper function to get network parameters for wallet_addEthereumChain
-function getNetworkParams(chainId: number) {
-  switch (chainId) {
-    case 1:
-      return {
-        chainId: '0x1',
-        chainName: 'Ethereum',
-        nativeCurrency: {
-          name: 'Ether',
-          symbol: 'ETH',
-          decimals: 18,
-        },
-        rpcUrls: ['https://ethereum.publicnode.com'],
-        blockExplorerUrls: ['https://etherscan.io'],
-      };
-    case 11155111:
-      return {
-        chainId: '0xaa36a7',
-        chainName: 'Sepolia',
-        nativeCurrency: {
-          name: 'Sepolia Ether',
-          symbol: 'ETH',
-          decimals: 18,
-        },
-        rpcUrls: ['https://sepolia.gateway.tenderly.co'],
-        blockExplorerUrls: ['https://sepolia.etherscan.io'],
-      };
-    case 97476:
-      return {
-        chainId: '0x17cc4',
-        chainName: 'Doma Testnet',
-        nativeCurrency: {
-          name: 'Doma Ether',
-          symbol: 'ETH',
-          decimals: 18,
-        },
-        rpcUrls: ['https://rpc-testnet.doma.xyz'],
-        blockExplorerUrls: ['https://explorer-testnet.doma.xyz'],
-      };
-    default:
-      throw new Error(`Unsupported chain ID: ${chainId}`);
+// Helper function to parse network ID - handles both CAIP-10 and numeric formats
+function parseNetworkId(networkId: string | number): number {
+  if (typeof networkId === 'number') {
+    return networkId;
   }
+
+  if (typeof networkId === 'string') {
+    // If it contains ':' it's CAIP-10 format
+    if (networkId.includes(':')) {
+      return Number(parseCAIP10(networkId).chainId);
+    } else {
+      // Plain numeric string
+      return Number(networkId);
+    }
+  }
+
+  throw new Error(`Invalid network ID format: ${networkId}`);
 }
+
+// Note: Network switching is now handled by Wagmi automatically
 
 export function useOrderbook() {
+  // Privy for authentication
   const { user, connectWallet } = usePrivy();
 
+  // Wagmi for blockchain operations
+  const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
+
   const apiClient: ApiClient = new ApiClient(orderbookConfig.apiClientOptions);
-  const walletClient = createMockWalletClient();
 
   const ensureWalletConnected = useCallback(async () => {
     if (!user?.wallet?.address) {
@@ -168,7 +92,7 @@ export function useOrderbook() {
     currencies = []
   }: {
     params: CreateOfferParams;
-    networkId: string;
+    networkId: string | number;
     onProgress: OnProgressCallback;
     hasWethOffer?: boolean;
     currencies?: CurrencyToken[];
@@ -178,123 +102,24 @@ export function useOrderbook() {
     }
 
     try {
-      // Parse chain ID from network ID
-      const chainId = Number(parseCAIP10(networkId).chainId);
+      // Parse chain ID from network ID - supports both formats
+      const chainId = parseNetworkId(networkId);
 
-      // Switch to the correct network
-      await walletClient.switchChain({ id: chainId });
+      console.log("🚀 Hybrid approach: Privy auth + Wagmi signer");
+      console.log("🔗 Chain ID:", chainId);
+      console.log("👛 Privy user address:", user?.wallet?.address);
+      console.log("🔹 Wagmi address:", address);
+      console.log("🔹 Wagmi connected:", isConnected);
 
-      // Create signer using Privy's wallet provider
-      if (!user?.wallet?.address) {
-        throw new Error("No wallet connected");
+      // Use Wagmi for signer creation (much cleaner!)
+      if (!isConnected || !walletClient) {
+        throw new Error("Wagmi wallet not connected");
       }
 
-      console.log("=== WALLET DEBUG INFO ===");
-      console.log("Privy user:", user);
-      console.log("Privy wallet:", user.wallet);
-      console.log("Expected address:", user.wallet.address);
+      // Convert Wagmi wallet client to ethers signer - like domain_space does it!
+      const signer = viemToEthersSigner(walletClient, toCAIP2ChainId(chainId));
 
-      // Get provider - for external wallets, use window.ethereum directly
-      let privyProvider;
-
-      if (user.wallet.getEthereumProvider) {
-        // Embedded wallet
-        privyProvider = await user.wallet.getEthereumProvider();
-        console.log("Using embedded wallet provider:", privyProvider);
-      } else {
-        // External wallet - use window.ethereum
-        privyProvider = window.ethereum;
-        console.log("Using external wallet provider (window.ethereum):", privyProvider);
-      }
-
-      const provider = new BrowserProvider(privyProvider);
-
-      // Check all available accounts
-      const accounts = await provider.listAccounts();
-      console.log("Available accounts:", accounts.map(acc => acc.address));
-
-      // Force the provider to use the correct account by switching to it first
-      try {
-        console.log("Attempting to switch to Privy wallet address...");
-        await privyProvider.request({
-          method: 'wallet_requestPermissions',
-          params: [{ eth_accounts: {} }],
-        });
-
-        // Request accounts to ensure the correct one is selected
-        const requestedAccounts = await privyProvider.request({
-          method: 'eth_requestAccounts',
-        });
-        console.log("Requested accounts:", requestedAccounts);
-
-        // Check if our target address is in the requested accounts
-        const targetAddress = user.wallet.address.toLowerCase();
-        const foundAccount = requestedAccounts.find((addr: string) => addr.toLowerCase() === targetAddress);
-
-        if (!foundAccount) {
-          console.log("Target address not found in requested accounts, trying to switch...");
-          // Try to switch to the specific account
-          try {
-            await privyProvider.request({
-              method: 'wallet_switchEthereumAccount',
-              params: [targetAddress],
-            });
-          } catch (switchError) {
-            console.log("wallet_switchEthereumAccount not supported, continuing...");
-          }
-        }
-      } catch (permissionError) {
-        console.log("Permission request failed, continuing with default flow:", permissionError);
-      }
-
-      // Now get the signer
-      let signer;
-      try {
-        // First try getting the signer normally
-        signer = await provider.getSigner();
-        const signerAddress = await signer.getAddress();
-        console.log("Default signer address:", signerAddress);
-
-        // If it doesn't match, try to get signer for the specific account index
-        if (signerAddress.toLowerCase() !== user.wallet.address.toLowerCase()) {
-          console.log("Address mismatch! Trying to find correct account index...");
-
-          // Try to find the correct account index
-          const targetAddress = user.wallet.address.toLowerCase();
-          let foundSigner = null;
-
-          for (let i = 0; i < accounts.length; i++) {
-            try {
-              const testSigner = await provider.getSigner(i);
-              const testAddress = await testSigner.getAddress();
-              console.log(`Account ${i}: ${testAddress}`);
-
-              if (testAddress.toLowerCase() === targetAddress) {
-                foundSigner = testSigner;
-                console.log(`✅ Found matching signer at index ${i}`);
-                break;
-              }
-            } catch (indexError) {
-              console.log(`Could not get signer for index ${i}:`, indexError);
-            }
-          }
-
-          if (foundSigner) {
-            signer = foundSigner;
-          } else {
-            console.log("Could not find matching signer, using default but will continue...");
-          }
-        }
-      } catch (error) {
-        console.error("Error creating signer:", error);
-        throw new Error(`Could not create signer for address ${user.wallet.address}`);
-      }
-
-      const finalSignerAddress = await signer.getAddress();
-      console.log("Final signer address:", finalSignerAddress);
-      console.log("Expected address:", user.wallet.address);
-      console.log("Addresses match:", finalSignerAddress.toLowerCase() === user.wallet.address.toLowerCase());
-      console.log("=== END WALLET DEBUG ===");
+      console.log("✅ Signer created successfully using Wagmi");
 
       // Convert to CAIP-2 format
       const caip2ChainId = toCAIP2ChainId(chainId);
@@ -316,7 +141,7 @@ export function useOrderbook() {
       console.error("Error creating offer:", error);
       throw error;
     }
-  }, [ensureWalletConnected]);
+  }, [ensureWalletConnected, user?.wallet?.address, address, isConnected, walletClient]);
 
   const acceptOffer = useCallback(async ({
     params,
@@ -324,7 +149,7 @@ export function useOrderbook() {
     onProgress
   }: {
     params: AcceptOfferParams;
-    networkId: string;
+    networkId: string | number;
     onProgress: OnProgressCallback;
   }): Promise<AcceptOfferResult> => {
     if (!(await ensureWalletConnected())) {
@@ -332,39 +157,21 @@ export function useOrderbook() {
     }
 
     try {
-      // Parse chain ID from network ID
-      const chainId = Number(parseCAIP10(networkId).chainId);
+      // Parse chain ID from network ID - supports both formats
+      const chainId = parseNetworkId(networkId);
 
-      // Switch to the correct network
-      await walletClient.switchChain({ id: chainId });
+      console.log("🚀 Accept Offer: Privy auth + Wagmi signer");
+      console.log("🔗 Chain ID:", chainId);
 
-      // Create signer using Privy's wallet provider
-      if (!user?.wallet?.address) {
-        throw new Error("No wallet connected");
+      // Use Wagmi for signer creation (consistent with createOffer)
+      if (!isConnected || !walletClient) {
+        throw new Error("Wagmi wallet not connected");
       }
 
-      // Get provider - for external wallets, use window.ethereum directly
-      let privyProvider;
+      // Convert Wagmi wallet client to ethers signer - like domain_space does it!
+      const signer = viemToEthersSigner(walletClient, toCAIP2ChainId(chainId));
 
-      if (user.wallet.getEthereumProvider) {
-        // Embedded wallet
-        privyProvider = await user.wallet.getEthereumProvider();
-      } else {
-        // External wallet - use window.ethereum
-        privyProvider = window.ethereum;
-      }
-
-      const provider = new BrowserProvider(privyProvider);
-      const signer = await provider.getSigner();
-
-      // Verify the signer address matches the connected wallet
-      const signerAddress = await signer.getAddress();
-      console.log("Privy wallet address:", user.wallet.address);
-      console.log("Signer address:", signerAddress);
-
-      if (signerAddress.toLowerCase() !== user.wallet.address.toLowerCase()) {
-        console.warn("Address mismatch! Using Privy wallet address as fallback");
-      }
+      console.log("✅ Signer created successfully using Wagmi");
 
       // Convert to CAIP-2 format
       const caip2ChainId = toCAIP2ChainId(chainId);
@@ -382,7 +189,7 @@ export function useOrderbook() {
       console.error("Error accepting offer:", error);
       throw error;
     }
-  }, [ensureWalletConnected]);
+  }, [ensureWalletConnected, isConnected, walletClient]);
 
   const cancelOffer = useCallback(async ({
     params,
@@ -390,7 +197,7 @@ export function useOrderbook() {
     onProgress
   }: {
     params: CancelOfferParams;
-    networkId: string;
+    networkId: string | number;
     onProgress: OnProgressCallback;
   }): Promise<CancelOfferResult> => {
     if (!(await ensureWalletConnected())) {
@@ -398,39 +205,21 @@ export function useOrderbook() {
     }
 
     try {
-      // Parse chain ID from network ID
-      const chainId = Number(parseCAIP10(networkId).chainId);
+      // Parse chain ID from network ID - supports both formats
+      const chainId = parseNetworkId(networkId);
 
-      // Switch to the correct network
-      await walletClient.switchChain({ id: chainId });
+      console.log("🚀 Cancel Offer: Privy auth + Wagmi signer");
+      console.log("🔗 Chain ID:", chainId);
 
-      // Create signer using Privy's wallet provider
-      if (!user?.wallet?.address) {
-        throw new Error("No wallet connected");
+      // Use Wagmi for signer creation (consistent with createOffer)
+      if (!isConnected || !walletClient) {
+        throw new Error("Wagmi wallet not connected");
       }
 
-      // Get provider - for external wallets, use window.ethereum directly
-      let privyProvider;
+      // Convert Wagmi wallet client to ethers signer - like domain_space does it!
+      const signer = viemToEthersSigner(walletClient, toCAIP2ChainId(chainId));
 
-      if (user.wallet.getEthereumProvider) {
-        // Embedded wallet
-        privyProvider = await user.wallet.getEthereumProvider();
-      } else {
-        // External wallet - use window.ethereum
-        privyProvider = window.ethereum;
-      }
-
-      const provider = new BrowserProvider(privyProvider);
-      const signer = await provider.getSigner();
-
-      // Verify the signer address matches the connected wallet
-      const signerAddress = await signer.getAddress();
-      console.log("Privy wallet address:", user.wallet.address);
-      console.log("Signer address:", signerAddress);
-
-      if (signerAddress.toLowerCase() !== user.wallet.address.toLowerCase()) {
-        console.warn("Address mismatch! Using Privy wallet address as fallback");
-      }
+      console.log("✅ Signer created successfully using Wagmi");
 
       // Convert to CAIP-2 format
       const caip2ChainId = toCAIP2ChainId(chainId);
@@ -448,7 +237,7 @@ export function useOrderbook() {
       console.error("Error canceling offer:", error);
       throw error;
     }
-  }, [ensureWalletConnected]);
+  }, [ensureWalletConnected, isConnected, walletClient]);
 
   const buyListing = useCallback(async ({
     params,
@@ -456,7 +245,7 @@ export function useOrderbook() {
     onProgress
   }: {
     params: BuyListingParams;
-    networkId: string;
+    networkId: string | number;
     onProgress: OnProgressCallback;
   }): Promise<BuyListingResult> => {
     if (!(await ensureWalletConnected())) {
@@ -464,39 +253,21 @@ export function useOrderbook() {
     }
 
     try {
-      // Parse chain ID from network ID
-      const chainId = Number(parseCAIP10(networkId).chainId);
+      // Parse chain ID from network ID - supports both formats
+      const chainId = parseNetworkId(networkId);
 
-      // Switch to the correct network
-      await walletClient.switchChain({ id: chainId });
+      console.log("🚀 Buy Listing: Privy auth + Wagmi signer");
+      console.log("🔗 Chain ID:", chainId);
 
-      // Create signer using Privy's wallet provider
-      if (!user?.wallet?.address) {
-        throw new Error("No wallet connected");
+      // Use Wagmi for signer creation (consistent with createOffer)
+      if (!isConnected || !walletClient) {
+        throw new Error("Wagmi wallet not connected");
       }
 
-      // Get provider - for external wallets, use window.ethereum directly
-      let privyProvider;
+      // Convert Wagmi wallet client to ethers signer - like domain_space does it!
+      const signer = viemToEthersSigner(walletClient, toCAIP2ChainId(chainId));
 
-      if (user.wallet.getEthereumProvider) {
-        // Embedded wallet
-        privyProvider = await user.wallet.getEthereumProvider();
-      } else {
-        // External wallet - use window.ethereum
-        privyProvider = window.ethereum;
-      }
-
-      const provider = new BrowserProvider(privyProvider);
-      const signer = await provider.getSigner();
-
-      // Verify the signer address matches the connected wallet
-      const signerAddress = await signer.getAddress();
-      console.log("Privy wallet address:", user.wallet.address);
-      console.log("Signer address:", signerAddress);
-
-      if (signerAddress.toLowerCase() !== user.wallet.address.toLowerCase()) {
-        console.warn("Address mismatch! Using Privy wallet address as fallback");
-      }
+      console.log("✅ Signer created successfully using Wagmi");
 
       // Convert to CAIP-2 format
       const caip2ChainId = toCAIP2ChainId(chainId);
@@ -514,7 +285,7 @@ export function useOrderbook() {
       console.error("Error buying listing:", error);
       throw error;
     }
-  }, [ensureWalletConnected]);
+  }, [ensureWalletConnected, isConnected, walletClient]);
 
   const getSupportedCurrencies = useCallback(async (
     params: GetSupportedCurrenciesRequest,
@@ -539,12 +310,6 @@ export function useOrderbook() {
           symbol: "WETH",
           decimals: 18,
           contractAddress: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
-        },
-        {
-          name: "Ether",
-          symbol: "ETH",
-          decimals: 18,
-          contractAddress: "0x0000000000000000000000000000000000000000",
         },
       ];
 
@@ -589,7 +354,7 @@ export function useOrderbook() {
     buyListing,
     getSupportedCurrencies,
     getOrderbookFee,
-    isWalletConnected: !!user?.wallet?.address,
-    walletAddress: user?.wallet?.address,
+    isWalletConnected: !!user?.wallet?.address && isConnected,
+    walletAddress: user?.wallet?.address || address,
   };
 }

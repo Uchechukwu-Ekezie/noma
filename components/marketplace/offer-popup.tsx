@@ -8,7 +8,7 @@ import { useOrderbook } from "@/hooks/use-orderbook";
 import { parseUnits } from "ethers";
 import { toast } from "sonner";
 import type { NameModel } from "@/types/doma";
-import type { CurrencyToken } from "@doma-protocol/orderbook-sdk";
+import type { CurrencyToken, OrderbookType } from "@doma-protocol/orderbook-sdk";
 
 interface OfferPopupProps {
   isOpen: boolean;
@@ -24,6 +24,7 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
   const [supportedCurrencies, setSupportedCurrencies] = useState<CurrencyToken[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [orderbootFee, setOrderbootFee] = useState(0.025);
+  const [marketplaceFees, setMarketplaceFees] = useState<any[]>([]);
 
   const {
     createOffer,
@@ -89,17 +90,46 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
               });
 
               console.log("Fee response:", feeResponse);
-              // Extract fee from response - handle both formats
+              // Extract fees from response - handle both formats
               const fees = feeResponse.marketplaceFees || feeResponse.data || [];
-              const fee = fees.length > 0 ? fees[0].basisPoints / 10000 : 0.025;
-              setOrderbootFee(fee);
+              console.log("Extracted fees:", fees);
+
+              // Store the actual fee objects for use in the offer
+              setMarketplaceFees(fees);
+
+              // Also store the percentage for display
+              const feePercentage = fees.length > 0 ? fees[0].basisPoints / 10000 : 0.025;
+              setOrderbootFee(feePercentage);
             } catch (feeError) {
-              console.warn("Failed to load orderbook fee, using default:", feeError);
-              setOrderbootFee(0.025); // Default 2.5% fee
+              console.warn("Failed to load orderbook fee, using empty fees:", feeError);
+              setOrderbootFee(0.025); // Default 2.5% fee for display
+              setMarketplaceFees([]); // Empty fees array like domain_space
             }
           } else {
-            console.log("No primary listing found - loading fallback currencies");
-            // If no listing, just use fallback currencies
+            console.log("No primary listing found - loading fallback currencies and trying to get fees anyway");
+
+            // Even without listing, try to get fees for the token
+            try {
+              const feeResponse = await getOrderbookFee({
+                chainId: networkId,
+                contractAddress: primaryToken.tokenAddress,
+                orderbook: "DOMA" // Default orderbook when no listing
+              });
+
+              console.log("Fee response (no listing):", feeResponse);
+              const fees = feeResponse.marketplaceFees || feeResponse.data || [];
+              console.log("Extracted fees (no listing):", fees);
+
+              setMarketplaceFees(fees);
+              const feePercentage = fees.length > 0 ? fees[0].basisPoints / 10000 : 0.025;
+              setOrderbootFee(feePercentage);
+            } catch (feeError) {
+              console.warn("Failed to load fees without listing, using empty array:", feeError);
+              setMarketplaceFees([]); // Empty fees like domain_space does
+              setOrderbootFee(0.025);
+            }
+
+            // Use fallback currencies (remove ETH with null address - might cause issues)
             const fallbackCurrencies = [
               {
                 name: "USD Coin",
@@ -113,12 +143,6 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
                 decimals: 18,
                 contractAddress: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
               },
-              {
-                name: "Ether",
-                symbol: "ETH",
-                decimals: 18,
-                contractAddress: "0x0000000000000000000000000000000000000000",
-              },
             ];
             setSupportedCurrencies(fallbackCurrencies);
             setSelectedCurrency(fallbackCurrencies[0]);
@@ -127,7 +151,10 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
           console.error("Error loading offer data:", error);
           toast.error("Failed to load offer configuration");
 
-          // Use fallback currencies on error
+          // Use fallback currencies and empty fees on error (like domain_space)
+          setMarketplaceFees([]); // Empty fees array
+          setOrderbootFee(0.025); // Default fee for display
+
           const fallbackCurrencies = [
             {
               name: "USD Coin",
@@ -140,12 +167,6 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
               symbol: "WETH",
               decimals: 18,
               contractAddress: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
-            },
-            {
-              name: "Ether",
-              symbol: "ETH",
-              decimals: 18,
-              contractAddress: "0x0000000000000000000000000000000000000000",
             },
           ];
           setSupportedCurrencies(fallbackCurrencies);
@@ -194,9 +215,10 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
         return;
       }
 
-      if (!primaryListing) {
-        console.log("❌ No primary listing");
-        toast.error("No listing information available");
+      // For make offer, we don't strictly need a listing, but we need basic token info
+      if (!primaryToken.tokenAddress || !primaryToken.tokenId) {
+        console.log("❌ Missing token address or ID");
+        toast.error("Missing token information");
         return;
       }
     }
@@ -214,7 +236,7 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
 
         console.log("🚀 Starting instant buy process...");
 
-        // Get network ID from token
+        // Get network ID from token - handle both string and number formats
         const networkId = primaryToken.chain?.networkId || primaryToken.networkId;
         console.log("networkId:", networkId);
 
@@ -250,7 +272,7 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
         // Handle make offer
         console.log("🚀 Starting make offer process...");
 
-        // Get network ID from token
+        // Get network ID from token - handle both string and number formats
         const networkId = primaryToken.chain?.networkId || primaryToken.networkId;
         console.log("networkId:", networkId);
 
@@ -262,6 +284,40 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
         const durationMs = parseInt(expirationDays) * 24 * 60 * 60 * 1000; // Convert days to milliseconds
         console.log("durationMs:", durationMs);
 
+        // Use the actual marketplace fees from the API (like domain_space does)
+        console.log("🏦 Using marketplace fees from API:", marketplaceFees);
+        console.log("🏦 Number of fees:", marketplaceFees.length);
+        console.log("🏦 Fee structure:", JSON.stringify(marketplaceFees, null, 2));
+
+        // Validate marketplace fees structure (like domain_space validation)
+        const validatedMarketplaceFees = marketplaceFees.filter(fee =>
+          fee && typeof fee.basisPoints === 'number' && fee.basisPoints > 0
+        );
+        console.log("🔍 Validated marketplace fees:", validatedMarketplaceFees);
+
+        // Use API fees if available, otherwise use REQUIRED fee recipients
+        let finalMarketplaceFees;
+
+        if (validatedMarketplaceFees.length > 0) {
+          console.log("🏦 Using marketplace fees from API");
+          finalMarketplaceFees = validatedMarketplaceFees;
+        } else {
+          console.log("🏦 Using REQUIRED marketplace fee recipients (API returned empty)");
+          // These are the required fee recipients from the error message
+          finalMarketplaceFees = [
+            {
+              recipient: "0x2E7cC63800e77BB8c662c45Ef33D1cCc23861532",
+              basisPoints: 250, // 2.5% - standard marketplace fee
+            },
+            {
+              recipient: "0x5318579e61A7a6cD71A8fd163C1A6794b2695E2b",
+              basisPoints: 250, // 2.5% - protocol fee
+            }
+          ];
+        }
+
+        console.log("🔧 Final marketplace fees to use:", finalMarketplaceFees);
+
         const params = {
           items: [{
             contract: primaryToken.tokenAddress,
@@ -270,12 +326,9 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
             currencyContractAddress: selectedCurrency!.contractAddress,
             duration: durationMs,
           }],
-          orderbook: primaryListing!.orderbook,
+          orderbook: (primaryListing?.orderbook || "DOMA") as OrderbookType,
           source: "noma-marketplace",
-          marketplaceFees: [{
-            recipient: "0x0000000000000000000000000000000000000000", // Replace with actual marketplace fee recipient
-            basisPoints: Math.floor(orderbootFee * 10000), // Convert percentage to basis points
-          }],
+          marketplaceFees: finalMarketplaceFees, // Use final fees (API or required)
         };
 
         console.log("📋 Offer params:", params);
@@ -285,14 +338,49 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
           parsedPrice: parseUnits(offerAmount, selectedCurrency!.decimals).toString()
         });
 
-        console.log("📞 Calling createOffer...");
+        // Validate the offer item structure
+        const offerItem = params.items[0];
+        console.log("🔍 Offer item validation:", {
+          contract: offerItem.contract,
+          tokenId: offerItem.tokenId,
+          price: offerItem.price,
+          priceAsNumber: BigInt(offerItem.price).toString(),
+          currencyContractAddress: offerItem.currencyContractAddress,
+          duration: offerItem.duration,
+          isValidPrice: BigInt(offerItem.price) > 0n
+        });
+
+        // Additional validation
+        if (!offerItem.contract || !offerItem.tokenId) {
+          throw new Error("Missing contract or tokenId");
+        }
+        if (BigInt(offerItem.price) <= 0n) {
+          throw new Error("Price must be greater than 0");
+        }
+        if (!offerItem.currencyContractAddress) {
+          throw new Error("Missing currency contract address");
+        }
+
+        console.log("📞 Calling createOffer with detailed params...");
+        console.log("🔍 Full params object:", JSON.stringify(params, null, 2));
+        console.log("🌐 NetworkId:", networkId);
+        console.log("💰 Selected currency details:", {
+          currency: selectedCurrency,
+          symbol: selectedCurrency!.symbol,
+          contractAddress: selectedCurrency!.contractAddress,
+          decimals: selectedCurrency!.decimals,
+          hasContractAddress: !!selectedCurrency!.contractAddress
+        });
+        console.log("🔗 Has WETH offer:", selectedCurrency!.symbol?.toLowerCase() === "weth");
+        console.log("💱 Supported currencies count:", supportedCurrencies.length);
+
         const result = await createOffer({
           params,
           networkId,
           onProgress: (progress) => {
             progress.forEach((step) => {
-              console.log("📈 Progress:", step.description);
-              toast.info(step.description);
+              console.log("📈 Progress:", step.description, "Status:", step.status);
+              toast.info(`${step.description} - ${step.status}`);
             });
           },
           hasWethOffer: selectedCurrency!.symbol?.toLowerCase() === "weth",
@@ -306,8 +394,38 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
         onClose();
       }
     } catch (error: any) {
-      console.error("Error submitting offer:", error);
-      toast.error(error.message || "Failed to submit offer");
+      console.error("❌ Error submitting offer:", error);
+      console.error("❌ Error details:", {
+        message: error.message,
+        code: error.code,
+        cause: error.cause,
+        stack: error.stack,
+        full: error
+      });
+
+      // Extract more meaningful error messages
+      let errorMessage = "Failed to submit offer";
+
+      if (error.message) {
+        errorMessage = error.message;
+      }
+
+      if (error.cause?.message) {
+        errorMessage += ` (${error.cause.message})`;
+      }
+
+      // Check for specific error types
+      if (error.message?.includes("insufficient funds")) {
+        errorMessage = "Insufficient funds to complete the offer";
+      } else if (error.message?.includes("user rejected")) {
+        errorMessage = "Transaction was cancelled by user";
+      } else if (error.message?.includes("network")) {
+        errorMessage = "Network error - please check your connection and try again";
+      } else if (error.message?.includes("API")) {
+        errorMessage = "API error - please try again later";
+      }
+
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
