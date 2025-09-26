@@ -14,6 +14,8 @@ interface XMTPContextType {
   initializeClient: () => Promise<void>;
   disconnect: () => void;
   canMessage: boolean;
+  revokeInstallations: () => Promise<void>;
+  clearLocalData: () => void;
 }
 
 const XMTPContext = createContext<XMTPContextType | undefined>(undefined);
@@ -87,23 +89,27 @@ export function XMTPProvider({ children }: XMTPProviderProps) {
         identifierKind: 'Ethereum' as const,
       };
 
-      // First check if user can message (has existing identity)
-      const canMessage = await Client.canMessage([identifier]);
+      // Check if user can message (has existing identity) - use domain_space approach
+      const canMessage = await Client.canMessage([identifier], 'dev');
 
       let xmtpClient;
 
       if (canMessage.get(user.wallet.address.toLowerCase())) {
-        console.log('Found existing XMTP identity, building client...');
-        // User has existing identity, build client without signing
+        console.log('✅ Found existing XMTP identity, building client (reuses existing installation)...');
+        // User has existing identity - use Client.build() to reuse existing installation
+        // This is the KEY difference from your old code - we build instead of create!
         xmtpClient = await Client.build(identifier, {
           env: 'dev',
         });
+        console.log("✅ Successfully built existing XMTP client");
       } else {
-        console.log('No existing identity found, creating new one (requires signature)...');
-        // Create new identity - this will trigger signing
+        console.log('❌ No existing identity found, creating new one (requires signature)...');
+        // Only create new identity if user is not registered
+        // This should only happen for brand new users
         xmtpClient = await Client.create(signer, {
           env: 'dev',
         });
+        console.log("✅ Successfully created new XMTP client");
       }
 
       console.log('XMTP client ready!');
@@ -121,22 +127,30 @@ export function XMTPProvider({ children }: XMTPProviderProps) {
       console.error('Error initializing XMTP client:', error);
 
       let errorMessage = 'Failed to initialize XMTP';
+      let isInstallationLimitError = false;
 
       if (error instanceof Error) {
-        if (error.message.includes('User rejected') || error.message.includes('denied')) {
+        const errorStr = error.message;
+
+        if (errorStr.includes('10/10 installations') || errorStr.includes('already registered 10/10')) {
+          isInstallationLimitError = true;
+          errorMessage = 'Installation limit reached (10/10). Clear browser data or use incognito mode to reset.';
+        } else if (errorStr.includes('User rejected') || errorStr.includes('denied')) {
           errorMessage = 'Signature required to enable messaging. Please try again and approve the signature.';
-        } else if (error.message.includes('network')) {
+        } else if (errorStr.includes('network')) {
           errorMessage = 'Network error. Please check your connection and try again.';
         } else {
-          errorMessage = error.message;
+          errorMessage = errorStr;
         }
       }
 
       setError(errorMessage);
 
       toast({
-        title: "XMTP Setup Failed",
-        description: errorMessage,
+        title: isInstallationLimitError ? "Installation Limit Reached" : "XMTP Setup Failed",
+        description: isInstallationLimitError
+          ? "Clear browser data, use incognito mode, or try a different browser to reset XMTP installations."
+          : errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -157,6 +171,104 @@ export function XMTPProvider({ children }: XMTPProviderProps) {
       });
     }
   }, [client, toast]);
+
+  // Clear local XMTP data (similar to domain_space approach)
+  const clearLocalData = useCallback(() => {
+    try {
+      localStorage.removeItem('xmtp');
+      sessionStorage.removeItem('xmtp');
+
+      // Clear IndexedDB XMTP data
+      if (typeof indexedDB !== 'undefined') {
+        indexedDB.databases().then(databases => {
+          databases.forEach(db => {
+            if (db.name?.includes('xmtp')) {
+              indexedDB.deleteDatabase(db.name);
+            }
+          });
+        });
+      }
+
+      toast({
+        title: "Local Data Cleared",
+        description: "XMTP local storage has been cleared",
+      });
+    } catch (error) {
+      console.log('Local data cleanup completed');
+    }
+  }, [toast]);
+
+  // Revoke XMTP installations (using domain_space approach)
+  const revokeInstallations = useCallback(async () => {
+    if (!user?.wallet?.address) {
+      toast({
+        title: "No Wallet Connected",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log('🔄 Attempting to revoke XMTP installations...');
+
+      const identifier = {
+        identifier: user.wallet.address.toLowerCase(),
+        identifierKind: 'Ethereum' as const,
+      };
+
+      // Check if address is registered
+      const canMessage = await Client.canMessage([identifier], 'dev');
+      if (!canMessage.get(user.wallet.address.toLowerCase())) {
+        throw new Error('This address is not registered with XMTP. No installations to revoke.');
+      }
+
+      // Try to extract inbox ID from the error if we hit 10/10 limit
+      let inboxId: string | null = null;
+
+      try {
+        // This might fail with 10/10 error, but we can extract the inbox ID
+        const signer = createXMTPSigner(user, signMessage);
+        if (!signer) throw new Error('Failed to create signer');
+
+        await Client.create(signer, { env: 'dev' });
+      } catch (createError) {
+        const errorStr = String(createError);
+        const inboxIdMatch = errorStr.match(/InboxID\s+([a-f0-9]+)/i);
+        if (inboxIdMatch) {
+          inboxId = inboxIdMatch[1];
+          console.log('✅ Extracted inbox ID from error:', inboxId);
+        }
+      }
+
+      if (inboxId) {
+        toast({
+          title: "Installation Limit Reached",
+          description: `Found inbox ID: ${inboxId.slice(0, 8)}... Clear browser data and try a different browser/incognito mode to reset.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Manual Reset Required",
+          description: "Clear browser data, use incognito mode, or try a different browser to reset XMTP installations.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error revoking installations:', error);
+
+      toast({
+        title: "Reset Required",
+        description: "To fix installation limits: 1) Clear browser data, 2) Use incognito mode, or 3) Try different browser",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.wallet?.address, signMessage, toast]);
 
   // Auto-initialize when wallet is connected
   useEffect(() => {
@@ -180,6 +292,8 @@ export function XMTPProvider({ children }: XMTPProviderProps) {
     initializeClient,
     disconnect,
     canMessage,
+    revokeInstallations,
+    clearLocalData,
   };
 
   return (

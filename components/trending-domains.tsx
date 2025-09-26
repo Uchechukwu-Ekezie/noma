@@ -18,6 +18,7 @@ import {
 import { useTrendingDomains } from "@/hooks/use-doma";
 import { useRouter } from "next/navigation";
 import type { NameModel } from "@/types/doma";
+import { getDomainAvatarUrl, getDomainGradientCSS } from "@/lib/avatar-utils";
 
 interface TrendingDomainsProps {
   /** Number of domains to display */
@@ -226,14 +227,23 @@ export function TrendingDomains({
                     className="transition-shadow bg-[#2b2b2b] text-white cursor-pointer group hover:shadow-lg rounded-[20px]"
                     onClick={() => handleDomainClick(domain.name)}
                   >
-                    {/* Domain Image */}
-                    <div className="w-full h-64 relative rounded-t-[20px] overflow-hidden">
-                      <div className="absolute inset-0 bg-gradient-to-br from-[#A259FF] to-[#00D4FF] flex items-center justify-center">
+                    {/* Domain Avatar Image */}
+                    <div
+                      className="w-full h-64 relative rounded-t-[20px] overflow-hidden"
+                      style={{ background: getDomainGradientCSS(domain.name, 'to bottom right') }}
+                    >
+                      <div className="absolute inset-0 flex items-center justify-center backdrop-blur-sm bg-black/10">
                         <div className="text-center">
-                          <div className="text-6xl font-bold text-white mb-4 drop-shadow-lg">
-                            {domain.name.split('.')[0].charAt(0).toUpperCase()}
+                          {/* DiceBear Avatar */}
+                          <div className="mb-4">
+                            <img
+                              src={getDomainAvatarUrl(domain.name, { size: 120 })}
+                              alt={`${domain.name} avatar`}
+                              className="w-30 h-30 mx-auto rounded-full border-4 border-white/20 shadow-2xl"
+                              style={{ width: '120px', height: '120px' }}
+                            />
                           </div>
-                          <div className="text-lg text-white/90 font-medium drop-shadow-lg">
+                          <div className="text-lg text-white font-bold drop-shadow-lg tracking-wider">
                             {domain.name}
                           </div>
                         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Fragment } from "react";
+import { useState, Fragment, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +27,8 @@ import { CollectionsBrowser } from "./collections-browser";
 import { TrendingDomains } from "@/components/trending-domains";
 import { useListings, useSearchDomains } from "@/hooks/use-doma";
 import type { NameModel, NameListingModel } from "@/types/doma";
+import { useToast } from "@/hooks/use-toast";
+import { getDomainAvatarUrl, getDomainGradientCSS, avatarStyles } from "@/lib/avatar-utils";
 
 // Categories for filtering
 const categories = [
@@ -75,10 +77,13 @@ interface DomainBrowserProps {
 
 export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowserProps) {
   const router = useRouter();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery || "");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(initialSearchQuery || "");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [activeTab, setActiveTab] = useState("domains");
   const [isSearching, setIsSearching] = useState(!!initialSearchQuery);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch listings from Doma API
   const {
@@ -98,7 +103,18 @@ export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowser
     isFetchingNextPage: isFetchingNextSearch,
     isLoading: isLoadingSearch,
     error: searchError,
-  } = useSearchDomains(searchQuery, { take: 12 });
+  } = useSearchDomains(isSearching ? debouncedSearchQuery : "", { take: 12 });
+
+  // Debug logging
+  console.log("Search State:", {
+    searchQuery,
+    debouncedSearchQuery,
+    isSearching,
+    searchDataPages: searchData?.pages?.length,
+    searchResultsCount: searchData?.pages?.flatMap(p => p.items).length,
+    isLoadingSearch,
+    searchError
+  });
 
   // Determine which data to show
   const currentData = isSearching ? searchData : listingsData;
@@ -116,20 +132,56 @@ export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowser
     router.push(`/domains/${encodeURIComponent(domainName)}`);
   };
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault();
-    setIsSearching(true);
-  };
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+    setDebouncedSearchQuery(searchQuery);
+    if (searchQuery.trim()) {
+      setIsSearching(true);
+    } else {
+      setIsSearching(false);
+    }
+  }, [searchQuery]);
 
-  const handleClearSearch = () => {
+  const handleSearchInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+
+    // Clear existing timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    // Set up new timeout for debounced search
+    debounceTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearchQuery(value);
+      if (value.trim().length > 0) {
+        setIsSearching(true);
+      } else {
+        setIsSearching(false);
+      }
+    }, 300); // 300ms delay
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
     setSearchQuery("");
+    setDebouncedSearchQuery("");
     setIsSearching(false);
-  };
+  }, []);
 
-  const handleTrendingSearch = (query: string) => {
+  const handleTrendingSearch = useCallback((query: string) => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
     setSearchQuery(query);
+    setDebouncedSearchQuery(query);
     setIsSearching(true);
-  };
+  }, []);
 
   const handleOfferClick = (listing: NameListingModel) => {
     console.log("Make offer for:", listing);
@@ -138,7 +190,25 @@ export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowser
 
   const handleContactOwner = (listing: NameListingModel) => {
     console.log("Contact owner for:", listing);
-    // You can implement contact functionality here
+
+    // Extract owner address from listing
+    const ownerAddress = listing.claimedBy ? listing.claimedBy.split(':')[2] : null;
+
+    if (!ownerAddress) {
+      toast({
+        title: "Cannot Contact Owner",
+        description: "Owner address not found for this domain.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Navigate to messages page with the owner's address as a query parameter
+    // This will trigger the chat interface to start a conversation with them
+    const messageUrl = `/messages?contact=${ownerAddress}&domain=${encodeURIComponent(listing.name)}`;
+
+    // Use window.location to navigate (or you could use Next.js router)
+    window.location.href = messageUrl;
   };
 
   const trendingSearches = [
@@ -149,6 +219,15 @@ export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowser
     "nft",
   ];
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="relative py-20 overflow-hidden bg-[#2b2b2b] lg:py-32 w-full">
       <div className="relative z-20 w-full">
@@ -157,12 +236,12 @@ export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowser
           <div className="container p-4 mx-auto">
             <div className="mb-8 text-left text-white">
               <h2 className="mb-4 text-[51px] font-bold">
-                {isSearching && searchQuery
-                  ? `Search Results for "${searchQuery}"`
+                {isSearching && debouncedSearchQuery
+                  ? `Search Results for "${debouncedSearchQuery}"`
                   : "Find Your Perfect Domain"}
               </h2>
               <p className="text-[24px]">
-                {isSearching && searchQuery
+                {isSearching && debouncedSearchQuery
                   ? `Found ${domains.length} domains matching your search`
                   : "Search through real blockchain domains or browse all available listings"}
               </p>
@@ -183,7 +262,7 @@ export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowser
                   <Search className="absolute w-4 h-4 -translate-y-1/2 left-3 top-1/2 text-white/60" />
                   <Input
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={handleSearchInputChange}
                     placeholder="Search domains (e.g., tech, crypto, ai...)"
                     className="h-12 pl-10 text-lg rounded-[20px] border-[#A259FF]/30 border-2 bg-[#2b2b2b] text-white placeholder:text-white/60 focus:border-[#A259FF] focus:ring-[#A259FF]"
                   />
@@ -312,14 +391,23 @@ export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowser
                             className="transition-shadow bg-[#2b2b2b] text-white cursor-pointer group hover:shadow-lg rounded-[20px]"
                             onClick={() => handleDomainClick(listing.name)}
                           >
-                            {/* Domain Image */}
-                            <div className="w-full h-64 relative rounded-t-[20px] overflow-hidden">
-                              <div className="absolute inset-0 bg-gradient-to-br from-[#A259FF] to-[#00D4FF] flex items-center justify-center">
+                            {/* Domain Avatar Image */}
+                            <div
+                              className="w-full h-64 relative rounded-t-[20px] overflow-hidden"
+                              style={{ background: getDomainGradientCSS(listing.name, 'to bottom right') }}
+                            >
+                              <div className="absolute inset-0 flex items-center justify-center backdrop-blur-sm bg-black/10">
                                 <div className="text-center">
-                                  <div className="text-6xl font-bold text-white mb-4 drop-shadow-lg">
-                                    {listing.name.split('.')[0].charAt(0).toUpperCase()}
+                                  {/* DiceBear Avatar */}
+                                  <div className="mb-4">
+                                    <img
+                                      src={getDomainAvatarUrl(listing.name, { size: 120 })}
+                                      alt={`${listing.name} avatar`}
+                                      className="w-30 h-30 mx-auto rounded-full border-4 border-white/20 shadow-2xl"
+                                      style={{ width: '120px', height: '120px' }}
+                                    />
                                   </div>
-                                  <div className="text-lg text-white/90 font-medium drop-shadow-lg">
+                                  <div className="text-lg text-white font-bold drop-shadow-lg tracking-wider">
                                     {listing.name}
                                   </div>
                                 </div>
@@ -340,7 +428,7 @@ export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowser
                                       {listing.name}
                                     </CardTitle>
                                     <p className="text-sm text-white/60 mt-1">
-                                      {listing.registrar.name}
+                                      {listing.registrar?.name || 'Unknown Registrar'}
                                     </p>
                                   </div>
                                   <Badge
@@ -357,10 +445,10 @@ export function DomainBrowser({ searchQuery: initialSearchQuery }: DomainBrowser
                                 <div className="flex items-center justify-between">
                                   <div>
                                     <div className="text-2xl font-bold text-white">
-                                      {formatPrice(listing.price, listing.currency.symbol)}
+                                      {formatPrice(listing.price, listing.currency?.symbol)}
                                     </div>
                                     <div className="text-sm text-white/80">
-                                      on {listing.chain.name}
+                                      on {listing.chain?.name || 'Unknown Chain'}
                                     </div>
                                   </div>
                                   <Badge
