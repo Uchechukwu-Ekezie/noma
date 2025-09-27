@@ -13,11 +13,11 @@ const urbanist = Urbanist({
 
 export const metadata: Metadata = {
   title: {
-    default: "Noma - Modern Web Application Platform",
-    template: "%s | Noma",
+    default: "Zephyra - Modern Web Application Platform",
+    template: "%s | Zephyra",
   },
   description:
-    "Noma is a cutting-edge web application built with Next.js, TypeScript, and Tailwind CSS. Experience modern design with premium user interface and seamless performance.",
+    "Zephyra is a cutting-edge web application built with Next.js, TypeScript, and Tailwind CSS. Experience modern design with premium user interface and seamless performance.",
   icons: {
     icon: "/noma_logo.svg",
     shortcut: "/noma_logo.svg",
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     },
   },
   keywords: [
-    "noma",
+    "zephyra",
     "nextjs",
     "typescript",
     "tailwind css",
@@ -39,42 +39,42 @@ export const metadata: Metadata = {
     "user interface",
     "responsive design",
   ],
-  authors: [{ name: "Noma Team" }],
-  creator: "Noma",
-  publisher: "Noma",
+  authors: [{ name: "Zephyra Team" }],
+  creator: "Zephyra",
+  publisher: "Zephyra",
   formatDetection: {
     email: false,
     address: false,
     telephone: false,
   },
-  metadataBase: new URL("https://noma.app"),
+  metadataBase: new URL("https://zephyra.app"),
   alternates: {
     canonical: "/",
   },
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://noma.app",
-    title: "Noma - Modern Web Application Platform",
+    url: "https://zephyra.app",
+    title: "Zephyra - Modern Web Application Platform",
     description:
-      "Noma is a cutting-edge web application built with Next.js, TypeScript, and Tailwind CSS. Experience modern design with premium user interface and seamless performance.",
-    siteName: "Noma",
+      "Zephyra is a cutting-edge web application built with Next.js, TypeScript, and Tailwind CSS. Experience modern design with premium user interface and seamless performance.",
+    siteName: "Zephyra",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Noma - Modern Web Application Platform",
+        alt: "Zephyra - Modern Web Application Platform",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Noma - Modern Web Application Platform",
+    title: "Zephyra - Modern Web Application Platform",
     description:
-      "Noma is a cutting-edge web application built with Next.js, TypeScript, and Tailwind CSS. Experience modern design with premium user interface and seamless performance.",
+      "Zephyra is a cutting-edge web application built with Next.js, TypeScript, and Tailwind CSS. Experience modern design with premium user interface and seamless performance.",
     images: ["/twitter-image.png"],
-    creator: "@noma_app",
+    creator: "@zephyra_app",
   },
   robots: {
     index: true,

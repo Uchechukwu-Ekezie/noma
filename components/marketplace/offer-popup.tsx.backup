@@ -209,7 +209,7 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
             duration: durationMs,
           }],
           orderbook: primaryListing!.orderbook,
-          source: "noma-marketplace",
+          source: "zephyra-marketplace",
           marketplaceFees: [{
             recipient: "0x0000000000000000000000000000000000000000", // Replace with actual marketplace fee recipient
             basisPoints: Math.floor(orderbootFee * 10000), // Convert percentage to basis points

@@ -24,13 +24,13 @@ export function Footer() {
               <div className="flex items-center justify-center w-10 h-10 rounded-lg">
                 <Image
                   src="/noma_logo.svg"
-                  alt="Noma Logo"
+                  alt="Zephyra Logo"
                   width={40}
                   height={40}
                   className="w-10 h-10"
                 />
               </div>
-              <span className="text-2xl font-bold text-[#A259FF]">Noma</span>
+              <span className="text-2xl font-bold text-[#A259FF]">Zephyra</span>
             </div>
             <p className="leading-relaxed text-white/80">
               The premier Web3 domain marketplace. Discover, buy, and trade
@@ -39,7 +39,7 @@ export function Footer() {
             </p>
             <div className="flex gap-4">
               <a
-                href="https://twitter.com/noma_domains"
+                href="https://twitter.com/zephyra_domains"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-[#3b3b3b] rounded-lg flex items-center justify-center hover:bg-[#A259FF] transition-colors"
@@ -47,7 +47,7 @@ export function Footer() {
                 <Twitter className="w-5 h-5 text-white/80 hover:text-white" />
               </a>
               <a
-                href="https://linkedin.com/company/noma-domains"
+                href="https://linkedin.com/company/zephyra-domains"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-[#3b3b3b] rounded-lg flex items-center justify-center hover:bg-[#A259FF] transition-colors"
@@ -55,7 +55,7 @@ export function Footer() {
                 <Linkedin className="w-5 h-5 text-white/80 hover:text-white" />
               </a>
               <a
-                href="https://github.com/noma-domains"
+                href="https://github.com/zephyra-domains"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-[#3b3b3b] rounded-lg flex items-center justify-center hover:bg-[#A259FF] transition-colors"
@@ -123,7 +123,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="mailto:support@noma.domains"
+                  href="mailto:support@zephyra.domains"
                   className="text-white/80 hover:text-[#A259FF] transition-colors flex items-center gap-2"
                 >
                   <Mail className="w-4 h-4" />
@@ -132,7 +132,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="https://docs.noma.domains"
+                  href="https://docs.zephyra.domains"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-white/80 hover:text-[#A259FF] transition-colors flex items-center gap-2"
@@ -143,7 +143,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="https://status.noma.domains"
+                  href="https://status.zephyra.domains"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-white/80 hover:text-[#A259FF] transition-colors flex items-center gap-2"
@@ -208,7 +208,7 @@ export function Footer() {
         <div className="border-t border-[#A259FF]/20 pt-8">
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
             <div className="text-sm text-white/60">
-              © 2025 Noma Domains. All rights reserved.
+              © 2025 Zephyra Domains. All rights reserved.
             </div>
             <div className="flex gap-6 text-sm">
               <a

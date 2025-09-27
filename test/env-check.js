@@ -41,7 +41,7 @@ optionalEnvVars.forEach(varName => {
 console.log("\n🔗 API Configuration Check:");
 console.log("- Doma API Base URL:", process.env.NEXT_PUBLIC_DOMA_URL || "https://api-testnet.doma.xyz");
 console.log("- GraphQL Endpoint:", process.env.NEXT_PUBLIC_DOMA_GRAPHQL_URL || "https://api-testnet.doma.xyz/graphql");
-console.log("- App Name:", process.env.NEXT_PUBLIC_APP_NAME || "noma-marketplace");
+console.log("- App Name:", process.env.NEXT_PUBLIC_APP_NAME || "zephyra-marketplace");
 
 // Check if API key format is correct
 const apiKey = process.env.NEXT_PUBLIC_DOMA_API_KEY;

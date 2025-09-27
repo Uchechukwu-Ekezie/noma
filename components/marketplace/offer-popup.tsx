@@ -327,7 +327,7 @@ export function OfferPopup({ isOpen, onClose, domain }: OfferPopupProps) {
             duration: durationMs,
           }],
           orderbook: (primaryListing?.orderbook || "DOMA") as OrderbookType,
-          source: "noma-marketplace",
+          source: "zephyra-marketplace",
           marketplaceFees: finalMarketplaceFees, // Use final fees (API or required)
         };
 
