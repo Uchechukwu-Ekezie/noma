@@ -6,10 +6,10 @@ import { ReactNode } from "react";
 
 // Create a metadata object
 const metadata = {
-  name: "Noma Marketplace",
-  description: "Noma Domain Marketplace - Testnet Mode",
-  url: "https://noma-marketplace.doma.xyz",
-  icons: ["https://noma-marketplace.doma.xyz/noma_logo.svg"],
+  name: "Zephyra Marketplace",
+  description: "Zephyra Domain Marketplace - Testnet Mode",
+  url: "https://zephyra-marketplace.doma.xyz",
+  icons: ["https://zephyra-marketplace.doma.xyz/noma_logo.svg"],
 };
 
 // Custom Doma Testnet configuration using AppKit's defineChain

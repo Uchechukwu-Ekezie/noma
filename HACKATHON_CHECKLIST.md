@@ -1,4 +1,4 @@
-# Hackathon Submission Checklist — Noma
+# Hackathon Submission Checklist — Zephyra
 
 Use this checklist during your live demo and when submitting the project.
 

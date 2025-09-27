@@ -16,11 +16,11 @@ export function Navigation() {
             >
               <Image
                 src="/noma_logo.svg"
-                alt="Noma Logo"
+                alt="Zephyra Logo"
                 width={50}
                 height={40}
               />
-              Noma
+              Zephyra
             </Link>
 
             <div className="items-center hidden gap-6 md:flex">

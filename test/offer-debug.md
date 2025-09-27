@@ -1,4 +1,4 @@
-# Noma Offer & Buy Functionality Debug Report
+# Zephyra Offer & Buy Functionality Debug Report
 
 ## Issues Identified and Fixed
 

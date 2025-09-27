@@ -1,17 +1,17 @@
 # 📋 **Product Requirements Document (PRD)**
 
-## **Noma Domain Marketplace Platform**
+## **Zephyra Domain Marketplace Platform**
 
 ---
 
 ## 📊 **Executive Summary**
 
-**Product Name:** Noma  
+**Product Name:** Zephyra  
 **Version:** 1.0  
 **Date:** January 2025  
 **Document Owner:** Product Team  
 
-Noma is a modern, decentralized domain marketplace platform that enables users to discover, trade, and auction premium domain names on the blockchain. Built with Next.js and integrated with the D3/DOMA ecosystem, Noma provides a seamless experience for domain trading with real-time auctions, collection management, and comprehensive domain analytics.
+Zephyra is a modern, decentralized domain marketplace platform that enables users to discover, trade, and auction premium domain names on the blockchain. Built with Next.js and integrated with the D3/DOMA ecosystem, Zephyra provides a seamless experience for domain trading with real-time auctions, collection management, and comprehensive domain analytics.
 
 ---
 
